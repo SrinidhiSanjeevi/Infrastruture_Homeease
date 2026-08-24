@@ -1,5 +1,22 @@
+# ============================================================
+# Terraform
+# ============================================================
+
+.terraform/
 *.tfstate
 *.tfstate.*
 *.tfplan
-.terraform/
+
+# Terraform backend configuration
 backend.hcl
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Variable files containing environment-specific values/secrets
+*.tfvars
+*.tfvars.json
+
+# Allow safe example variable files
+!*.tfvars.example

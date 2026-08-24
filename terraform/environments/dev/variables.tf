@@ -120,10 +120,7 @@ variable "private_endpoint_subnet_prefix" {
 # KEY VAULT
 # ============================================================
 
-variable "tenant_id" {
-  description = "Microsoft Entra tenant ID."
-  type        = string
-}
+
 
 variable "keyvault_sku" {
   description = "Key Vault SKU."

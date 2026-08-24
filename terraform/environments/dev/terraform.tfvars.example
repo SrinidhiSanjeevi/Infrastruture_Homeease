@@ -1,0 +1,36 @@
+environment  = "dev"
+project_name = "homeease"
+
+location = "Central India"
+
+aks_node_count = 1
+aks_vm_size    = "Standard_D2s_v5"
+aks_sku_tier   = "Free"
+
+kubernetes_version = null
+
+service_cidr   = "10.20.0.0/16"
+dns_service_ip = "10.20.0.10"
+
+acr_sku = "Basic"
+
+public_network_access_enabled = true
+
+vnet_address_space = [
+  "10.10.0.0/16"
+]
+
+aks_subnet_prefix = [
+  "10.10.0.0/22"
+]
+
+private_endpoint_subnet_prefix = [
+  "10.10.4.0/24"
+]
+
+keyvault_sku = "standard"
+
+keyvault_public_network_access_enabled = true
+
+kubernetes_namespace = "homeease"
+service_account_name = "homeease"

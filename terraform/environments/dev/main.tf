@@ -22,9 +22,9 @@ module "networking" {
   location            = var.location
   environment         = var.environment
 
-  vnet_address_space              = var.vnet_address_space
-  aks_subnet_prefix               = var.aks_subnet_prefix
-  private_endpoint_subnet_prefix  = var.private_endpoint_subnet_prefix
+  vnet_address_space             = var.vnet_address_space
+  aks_subnet_prefix              = var.aks_subnet_prefix
+  private_endpoint_subnet_prefix = var.private_endpoint_subnet_prefix
 
   tags = local.common_tags
 }
@@ -114,8 +114,8 @@ module "workload_identity" {
 
   aks_oidc_issuer_url = module.aks.oidc_issuer_url
 
-  namespace             = var.kubernetes_namespace
-  service_account_name  = var.service_account_name
+  namespace            = var.kubernetes_namespace
+  service_account_name = var.service_account_name
 
   key_vault_id = module.keyvault.id
 
