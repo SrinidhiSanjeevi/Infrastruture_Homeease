@@ -32,17 +32,13 @@ resource "azurerm_kubernetes_cluster" "this" {
   # ==========================================================
 
   default_node_pool {
-    name = "system"
-
-    node_count = var.node_count
+    name       = "default"
     vm_size    = var.vm_size
+    subnet_id  = var.subnet_id
 
-    vnet_subnet_id = var.subnet_id
-
-    temporary_name_for_rotation = "systemtmp"
-
-    upgrade_settings {
-      max_surge = "10%"
+    auto_scaling_enabled = true
+    min_count            = 1
+    max_count            = 3
     }
   }
 
@@ -79,3 +75,5 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 
   principal_id = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
 }
+
+

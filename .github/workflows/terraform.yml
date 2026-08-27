@@ -15,33 +15,38 @@ on:
       - "terraform/**"
       - ".github/workflows/terraform.yml"
 
+  workflow_dispatch:
+
 permissions:
   contents: read
   id-token: write
 
 env:
-  TF_VERSION: "1.7.0"
+  TF_VERSION: "1.13.5"
   TF_WORKING_DIR: terraform/environments/dev
 
 jobs:
-  terraform:
+  terraform-ci:
     name: Terraform Validate and Plan
     runs-on: ubuntu-latest
 
     defaults:
       run:
-        working-directory: terraform/environments/dev
+        working-directory: ${{ env.TF_WORKING_DIR }}
 
     steps:
+
       # --------------------------------------------------
-      # 1. Checkout repository
+      # Checkout
       # --------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # --------------------------------------------------
-      # 2. Authenticate to Azure using GitHub OIDC
+      # Azure OIDC Login
       # --------------------------------------------------
+
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -50,34 +55,39 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # --------------------------------------------------
-      # 3. Install Terraform
+      # Terraform
       # --------------------------------------------------
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
       # --------------------------------------------------
-      # 4. Terraform formatting check
+      # Format
       # --------------------------------------------------
+
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
         working-directory: terraform
+        run: terraform fmt -check -recursive
 
       # --------------------------------------------------
-      # 5. Initialize Terraform
+      # Init
       # --------------------------------------------------
+
       - name: Terraform Init
-        run: terraform init -reconfigure
+        run: terraform init -input=false -reconfigure
 
       # --------------------------------------------------
-      # 6. Validate Terraform
+      # Validate
       # --------------------------------------------------
+
       - name: Terraform Validate
         run: terraform validate
 
       # --------------------------------------------------
-      # 7. Terraform Plan
+      # Plan
       # --------------------------------------------------
+
       - name: Terraform Plan
-        run: terraform plan -input=false
+        run: terraform plan -input=false -no-color
