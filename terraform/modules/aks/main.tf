@@ -32,15 +32,15 @@ resource "azurerm_kubernetes_cluster" "this" {
   # ==========================================================
 
   default_node_pool {
-    name       = "default"
-    vm_size    = var.vm_size
-    subnet_id  = var.subnet_id
+    name      = "default"
+    vm_size   = var.vm_size
+    
 
     auto_scaling_enabled = true
     min_count            = 1
     max_count            = 3
-    }
   }
+
 
   # ==========================================================
   # Azure CNI Overlay
