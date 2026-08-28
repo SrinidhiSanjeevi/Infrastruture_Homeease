@@ -1,16 +1,16 @@
 terraform {
   required_version = ">= 1.7.0"
 
- required_providers {
-  azurerm = {
-    source  = "hashicorp/azurerm"
-    version = "~> 4.0"
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
-  random = {
-    source  = "hashicorp/random"
-    version = "~> 3.6"
-  }
-}
 
   backend "local" {
     path = "bootstrap.tfstate"
@@ -39,7 +39,7 @@ resource "azurerm_resource_group" "tfstate" {
 # ============================================================
 
 resource "random_string" "storage_suffix" {
-  length  = 6
+  length = 6
 
   special = false
   upper   = false
