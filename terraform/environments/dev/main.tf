@@ -84,7 +84,7 @@ module "aks" {
 module "keyvault" {
   source = "../../modules/keyvault"
 
-  name                = "kv-homeease-${var.environment}"
+  name                = "kv-${var.project_name}-${var.environment}-hs01"
   location            = var.location
   resource_group_name = module.resource_group.name
 

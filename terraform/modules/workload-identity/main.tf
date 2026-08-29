@@ -1,6 +1,11 @@
 # ============================================================
 # HomeEase User Assigned Managed Identity
 # ============================================================
+#
+# This identity is used by HomeEase workloads running in AKS.
+# No client secret or Azure credential is stored in Kubernetes.
+#
+# ============================================================
 
 resource "azurerm_user_assigned_identity" "homeease" {
   name                = var.identity_name
@@ -12,16 +17,24 @@ resource "azurerm_user_assigned_identity" "homeease" {
 
 # ============================================================
 # AKS Workload Identity Federation
+# ============================================================
 #
-# Allows Kubernetes workloads to authenticate to Azure
-# without storing Azure credentials inside Kubernetes.
+# Allows the Kubernetes service account to exchange its OIDC
+# token for an Azure AD token.
+#
+# No Azure client secret is required inside the application.
+#
+# The federated credential is tightly restricted to:
+#
+#   namespace:        var.namespace
+#   service account:  var.service_account_name
+#
 # ============================================================
 
 resource "azurerm_federated_identity_credential" "homeease" {
-  name                = var.federated_credential_name
-  resource_group_name = var.resource_group_name
+  name = var.federated_credential_name
 
-  parent_id = azurerm_user_assigned_identity.homeease.id
+  user_assigned_identity_id = azurerm_user_assigned_identity.homeease.id
 
   issuer = var.aks_oidc_issuer_url
 
@@ -34,9 +47,17 @@ resource "azurerm_federated_identity_credential" "homeease" {
 
 # ============================================================
 # Key Vault Access
+# ============================================================
 #
-# Grants the HomeEase workload identity permission to read
-# secrets from Azure Key Vault using Azure RBAC.
+# Grants ONLY the workload identity permission to read secrets.
+#
+# The identity does NOT receive:
+#   - Key Vault Administrator
+#   - Key Vault Secrets Officer
+#   - permission to create/update/delete secrets
+#
+# This follows least-privilege access.
+#
 # ============================================================
 
 resource "azurerm_role_assignment" "keyvault_secrets_user" {
