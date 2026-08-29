@@ -118,7 +118,9 @@ module "workload_identity" {
   namespace            = var.kubernetes_namespace
   service_account_name = var.service_account_name
 
-  key_vault_id = module.keyvault.id
+  key_vault_id    = module.keyvault.id
+  admin_object_id = var.admin_object_id
+
 
   tags = local.common_tags
 }

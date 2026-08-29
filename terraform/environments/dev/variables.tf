@@ -158,3 +158,7 @@ variable "service_account_name" {
 }
 
 
+variable "admin_object_id" {
+  description = "Azure AD object ID of the admin managing Key Vault secrets manually."
+  type        = string
+}
