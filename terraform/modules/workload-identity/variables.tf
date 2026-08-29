@@ -43,3 +43,14 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+
+variable "admin_object_id" {
+  description = "Object ID of the admin/user who needs read-write access to Key Vault secrets (for manual secret management)."
+  type        = string
+}
+
+variable "key_vault_id" {
+  description = "Resource ID of the Key Vault to grant admin access on."
+  type        = string
+}

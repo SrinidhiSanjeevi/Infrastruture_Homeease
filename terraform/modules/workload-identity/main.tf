@@ -66,3 +66,9 @@ resource "azurerm_role_assignment" "keyvault_secrets_user" {
 
   principal_id = azurerm_user_assigned_identity.homeease.principal_id
 }
+
+resource "azurerm_role_assignment" "admin_secrets_officer" {
+  scope                = var.key_vault_id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = var.admin_object_id
+}
