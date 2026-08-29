@@ -97,22 +97,6 @@ module "keyvault" {
   tags = local.common_tags
 }
 
-# ============================================================
-# APPLICATION SECRETS
-# ============================================================
-
-module "secrets" {
-  source = "../../modules/secrets"
-
-  key_vault_id = module.keyvault.id
-
-  mongo_uri           = var.mongo_uri
-  jwt_secret          = var.jwt_secret
-  email_user          = var.email_user
-  email_pass          = var.email_pass
-  razorpay_key_id     = var.razorpay_key_id
-  razorpay_key_secret = var.razorpay_key_secret
-}
 
 # ============================================================
 # AKS WORKLOAD IDENTITY
@@ -152,8 +136,3 @@ locals {
   }
 }
 
-resource "azurerm_role_assignment" "terraform_kv_admin" {
-  scope                = module.keyvault.id
-  role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
