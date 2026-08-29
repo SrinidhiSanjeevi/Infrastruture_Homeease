@@ -50,7 +50,3 @@ variable "admin_object_id" {
   type        = string
 }
 
-variable "key_vault_id" {
-  description = "Resource ID of the Key Vault to grant admin access on."
-  type        = string
-}
