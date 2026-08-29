@@ -27,18 +27,24 @@ resource "azurerm_kubernetes_cluster" "this" {
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
+
   # ==========================================================
   # Default Node Pool
   # ==========================================================
 
   default_node_pool {
-    name      = "default"
-    vm_size   = var.vm_size
-    
+    name       = "default"
+    vm_size    = var.vm_size
 
     auto_scaling_enabled = true
-    min_count            = 1
-    max_count            = 3
+    min_count             = 1
+    max_count             = 3
+
+    upgrade_settings {
+      max_surge                     = "10%"
+      drain_timeout_in_minutes      = 0
+      node_soak_duration_in_minutes = 0
+    }
   }
 
 
