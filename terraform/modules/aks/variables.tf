@@ -74,3 +74,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "secret_rotation_enabled" {
+  description = "Whether the Key Vault CSI driver polls for and syncs rotated secrets."
+  type        = bool
+  default     = true
+}
+
+variable "secret_rotation_interval" {
+  description = "How often the CSI driver polls Key Vault for secret changes."
+  type        = string
+  default     = "2m"
+}
