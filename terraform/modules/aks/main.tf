@@ -83,3 +83,14 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 }
 
 
+  # ==========================================================
+  # Azure Key Vault Secrets Provider (Secrets Store CSI Driver)
+  # ==========================================================
+  # This is the AKS-managed addon that installs the CSI driver +
+  # registers the SecretProviderClass CRD. Without this block, no
+  # SecretProviderClass can ever be applied — this was the missing
+  # piece causing "the server doesn't have a resource type" above.
+  key_vault_secrets_provider {
+    secret_rotation_enabled  = var.secret_rotation_enabled
+    secret_rotation_interval = var.secret_rotation_interval
+  }
