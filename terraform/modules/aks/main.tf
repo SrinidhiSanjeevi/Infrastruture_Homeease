@@ -6,38 +6,21 @@ resource "azurerm_kubernetes_cluster" "this" {
   dns_prefix         = var.dns_prefix
   kubernetes_version = var.kubernetes_version
 
-  # ==========================================================
-  # AKS pricing tier
-  # ==========================================================
-
   sku_tier = var.sku_tier
-
-  # ==========================================================
-  # Managed Identity
-  # ==========================================================
 
   identity {
     type = "SystemAssigned"
   }
 
-  # ==========================================================
-  # OIDC + Workload Identity
-  # ==========================================================
-
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
-
-  # ==========================================================
-  # Default Node Pool
-  # ==========================================================
-
   default_node_pool {
-    name       = "default"
-    vm_size    = var.vm_size
+    name    = "default"
+    vm_size = var.vm_size
 
     auto_scaling_enabled = true
-    min_count             = 1
+    min_count            = 1
     max_count             = 3
 
     upgrade_settings {
@@ -47,26 +30,30 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
-
-  # ==========================================================
-  # Azure CNI Overlay
-  # ==========================================================
-
   network_profile {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
-
-    network_policy = "azure"
-
-    service_cidr   = var.service_cidr
-    dns_service_ip = var.dns_service_ip
+    network_policy      = "azure"
+    service_cidr        = var.service_cidr
+    dns_service_ip       = var.dns_service_ip
   }
 
-  # ==========================================================
-  # Kubernetes RBAC
-  # ==========================================================
-
   role_based_access_control_enabled = true
+
+  # ==========================================================
+  # Azure Key Vault Secrets Provider (Secrets Store CSI Driver)
+  # ==========================================================
+  # AKS-managed addon: installs the CSI driver DaemonSet on every
+  # node AND registers the SecretProviderClass CRD cluster-wide.
+  # Without this block, `kubectl apply` on any SecretProviderClass
+  # manifest fails with "the server doesn't have a resource type" —
+  # the CRD simply doesn't exist until this addon is enabled. This
+  # MUST live inside the azurerm_kubernetes_cluster resource block,
+  # not as a standalone top-level block.
+  key_vault_secrets_provider {
+    secret_rotation_enabled  = var.secret_rotation_enabled
+    secret_rotation_interval = var.secret_rotation_interval
+  }
 
   tags = var.tags
 }
@@ -81,16 +68,3 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 
   principal_id = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
 }
-
-
-  # ==========================================================
-  # Azure Key Vault Secrets Provider (Secrets Store CSI Driver)
-  # ==========================================================
-  # This is the AKS-managed addon that installs the CSI driver +
-  # registers the SecretProviderClass CRD. Without this block, no
-  # SecretProviderClass can ever be applied — this was the missing
-  # piece causing "the server doesn't have a resource type" above.
-  key_vault_secrets_provider {
-    secret_rotation_enabled  = var.secret_rotation_enabled
-    secret_rotation_interval = var.secret_rotation_interval
-  }
