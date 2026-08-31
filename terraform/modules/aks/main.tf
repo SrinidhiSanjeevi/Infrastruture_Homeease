@@ -5,8 +5,7 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   dns_prefix         = var.dns_prefix
   kubernetes_version = var.kubernetes_version
-
-  sku_tier = var.sku_tier
+  sku_tier           = var.sku_tier
 
   identity {
     type = "SystemAssigned"
@@ -15,13 +14,19 @@ resource "azurerm_kubernetes_cluster" "this" {
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
+  # ==========================================================
+  # AKS SYSTEM NODE POOL
+  # ==========================================================
+
   default_node_pool {
-    name    = "default"
-    vm_size = var.vm_size
+    name                        = "default"
+    vm_size                     = var.vm_size
+    vnet_subnet_id              = var.subnet_id
+    temporary_name_for_rotation = "tmpdefault"
 
     auto_scaling_enabled = true
     min_count            = 1
-    max_count             = 3
+    max_count            = 3
 
     upgrade_settings {
       max_surge                     = "10%"
@@ -30,26 +35,28 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
+  # ==========================================================
+  # AKS NETWORKING
+  # ==========================================================
+
   network_profile {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
     network_policy      = "azure"
-    service_cidr        = var.service_cidr
-    dns_service_ip       = var.dns_service_ip
+
+    service_cidr   = var.service_cidr
+    dns_service_ip = var.dns_service_ip
+
+    load_balancer_sku = "standard"
+    outbound_type     = "loadBalancer"
   }
 
   role_based_access_control_enabled = true
 
   # ==========================================================
-  # Azure Key Vault Secrets Provider (Secrets Store CSI Driver)
+  # KEY VAULT CSI DRIVER
   # ==========================================================
-  # AKS-managed addon: installs the CSI driver DaemonSet on every
-  # node AND registers the SecretProviderClass CRD cluster-wide.
-  # Without this block, `kubectl apply` on any SecretProviderClass
-  # manifest fails with "the server doesn't have a resource type" —
-  # the CRD simply doesn't exist until this addon is enabled. This
-  # MUST live inside the azurerm_kubernetes_cluster resource block,
-  # not as a standalone top-level block.
+
   key_vault_secrets_provider {
     secret_rotation_enabled  = var.secret_rotation_enabled
     secret_rotation_interval = var.secret_rotation_interval
