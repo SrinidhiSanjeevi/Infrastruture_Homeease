@@ -1,18 +1,41 @@
 name: Terraform CI
 
+# ============================================================
+# Two stages:
+#   1. iac-scan   — checkov, repo-wide, ONE run (not per-environment;
+#                   it scans code, not state). Gate: fails the build.
+#                   This is the "IaC" layer from ANALYSIS.md §4 that
+#                   was previously missing entirely — it would have
+#                   flagged the missing staging/prod backends and the
+#                   public ACR endpoint before either shipped.
+#   2. terraform-ci — matrixed over dev / staging / prod. Each
+#                   environment:
+#     * has its own remote state (backend.tf, one key per env)
+#     * has its own least-privilege CI identity (ci.tf), scoped to
+#       its own resource group only
+#     * uses a GitHub Environment of the same name, so `prod` can
+#       require reviewer approval before its OIDC token is ever
+#       minted (Settings -> Environments -> prod -> required
+#       reviewers)
+#
+# This is a PLAN-ONLY pipeline (CI). Nothing here applies to real
+# infrastructure — `terraform apply` is a separate, human-gated CD
+# concern, out of scope here by design (see ANALYSIS.md §3).
+# ============================================================
+
 on:
   pull_request:
     branches:
       - main
     paths:
-      - "terraform/**"
+      - "terraform/azure/**"
       - ".github/workflows/terraform.yml"
 
   push:
     branches:
       - main
     paths:
-      - "terraform/**"
+      - "terraform/azure/**"
       - ".github/workflows/terraform.yml"
 
   workflow_dispatch:
@@ -23,71 +46,78 @@ permissions:
 
 env:
   TF_VERSION: "1.13.5"
-  TF_WORKING_DIR: terraform/environments/dev
 
 jobs:
-  terraform-ci:
-    name: Terraform Validate and Plan
+  iac-scan:
+    name: IaC scan (checkov)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@v12.1347.0
+        with:
+          directory: terraform/azure
+          framework: terraform
+          # Both known-accepted trade-offs, documented rather than
+          # silently suppressed:
+          #  CKV_AZURE_137 — ACR public network access. Tracked as
+          #    future work in ANALYSIS.md §8 (Premium + Private
+          #    Endpoint is the fix; Basic SKU on trial credit can't
+          #    have one).
+          #  CKV_AZURE_109 — Key Vault public network access, same
+          #    trade-off, same reason.
+          skip-check: CKV_AZURE_137,CKV_AZURE_109
+          soft-fail: false
+          output_format: cli
+
+  terraform-ci:
+    name: Terraform (${{ matrix.env }})
+    needs: iac-scan
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.env }}
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, staging, prod]
+
+    # The path was previously terraform/environments/<env> — the real
+    # tree is terraform/azure/environments/<env>. That mismatch made
+    # every run fail at `terraform init` (ANALYSIS.md finding #4).
     defaults:
       run:
-        working-directory: ${{ env.TF_WORKING_DIR }}
+        working-directory: terraform/azure/environments/${{ matrix.env }}
 
     steps:
-
-      # --------------------------------------------------
-      # Checkout
-      # --------------------------------------------------
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --------------------------------------------------
-      # Azure OIDC Login
-      # --------------------------------------------------
-
+      # Each environment has its OWN client ID (ci.tf in dev/staging/
+      # prod each register a separate, RG-scoped identity) but shares
+      # the same tenant and subscription. Set these as GitHub
+      # Environment variables/secrets per environment — see
+      # ANALYSIS.md §5, "Everything you have to click, once".
       - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      # --------------------------------------------------
-      # Terraform
-      # --------------------------------------------------
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # --------------------------------------------------
-      # Format
-      # --------------------------------------------------
-
       - name: Terraform Format Check
-        working-directory: terraform
+        working-directory: terraform/azure
         run: terraform fmt -check -recursive
-
-      # --------------------------------------------------
-      # Init
-      # --------------------------------------------------
 
       - name: Terraform Init
         run: terraform init -input=false -reconfigure
 
-      # --------------------------------------------------
-      # Validate
-      # --------------------------------------------------
-
       - name: Terraform Validate
         run: terraform validate
 
-      # --------------------------------------------------
-      # Plan
-      # --------------------------------------------------
-
       - name: Terraform Plan
-        run: terraform plan -input=false -no-color
+        run: terraform plan -input=false -no-color -var-file="terraform.tfvars.example"

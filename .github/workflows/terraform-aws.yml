@@ -1,0 +1,110 @@
+name: Terraform CI (AWS)
+
+# ============================================================
+# Mirrors terraform.yml (the Azure workflow) phase for phase, for
+# terraform/aws instead of terraform/azure. See that file's header
+# for the full rationale; differences here are cloud-native, not
+# architectural:
+#
+#   * checkov's skip-check list is empty — the AWS stacks don't carry
+#     the ACR/Key Vault public-endpoint trade-off the Azure ones do.
+#   * auth is GitHub OIDC -> IAM role, one role per environment
+#     (dev's ci-oidc push role is for the APP repo only; staging/prod
+#     use their own tf-apply-role, scoped to just what each of those
+#     environments manages today — see their main.tf).
+#   * bootstrap, dev, staging and prod are FOUR independent Terraform
+#     configurations (not one parameterised by var.environment like
+#     Azure), because dev alone owns the account-wide ECR repos and
+#     GitHub OIDC provider — see terraform/aws/environments/dev/
+#     main.tf for why staging/prod deliberately do not re-declare
+#     them.
+#
+# PLAN-ONLY (CI). `terraform apply` is a separate, human-gated CD
+# concern — same as the Azure workflow.
+# ============================================================
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "terraform/aws/**"
+      - ".github/workflows/terraform-aws.yml"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/aws/**"
+      - ".github/workflows/terraform-aws.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_VERSION: "1.13.5"
+
+jobs:
+  iac-scan:
+    name: IaC scan (checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@v12.1347.0
+        with:
+          directory: terraform/aws
+          framework: terraform
+          soft-fail: false
+          output_format: cli
+
+  terraform-ci:
+    name: Terraform (aws/${{ matrix.env }})
+    needs: iac-scan
+    runs-on: ubuntu-latest
+    environment: aws-${{ matrix.env }}
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, staging, prod]
+
+    defaults:
+      run:
+        working-directory: terraform/aws/environments/${{ matrix.env }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # dev's role comes from its own ci-oidc module (the same
+      # identity the app repo's push role trusts a DIFFERENT subject
+      # on); staging/prod each have their own tf-apply-role. All three
+      # trust the SAME GitHub OIDC provider — created once, by dev.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: homeease-infra-ci-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        working-directory: terraform/aws
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init -input=false -reconfigure
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -no-color -var-file="terraform.tfvars.example"
