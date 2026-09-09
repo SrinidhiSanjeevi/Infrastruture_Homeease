@@ -12,14 +12,21 @@ aks_node_count = 2
 
 aks_vm_size = "Standard_D2s_v5"
 
-# Paid tier provides SLA.
-aks_sku_tier = "Standard"
+# Free, not Standard. Standard's API-server SLA (~$73/mo) is not
+# something a capstone/trial-credit project can act on. See
+# ANALYSIS.md §2/§8. Revisit once this is a real production system
+# with an SLA to uphold.
+aks_sku_tier = "Free"
 
 # ============================================================
 # ACR
+#
+# Basic, not Premium. Saves ~$45/mo. Per-repository push isolation
+# (the main reason to pay for Premium) needs scope maps/tokens or
+# ABAC — both noted as future work in ANALYSIS.md §8.
 # ============================================================
 
-acr_sku = "Premium"
+acr_sku = "Basic"
 
 # Still public in current architecture.
 # Later change to false + Private Endpoint.
@@ -41,8 +48,28 @@ private_endpoint_subnet_prefix = [
   "10.30.4.0/24"
 ]
 
-tenant_id = "YOUR-AZURE-TENANT-ID"
+keyvault_sku = "standard"
+
+keyvault_public_network_access_enabled = true
 
 kubernetes_namespace = "homeease"
 
 service_account_name = "homeease"
+
+admin_object_id = "YOUR-AZURE-AD-ADMIN-OBJECT-ID"
+
+# ============================================================
+# CI IDENTITY (ci.tf) — GitHub Actions -> Terraform apply only.
+# No Azure DevOps / ACR push identity here: CI never builds images
+# for prod, it promotes the digest CI already built for dev.
+# ============================================================
+
+tfstate_storage_account_id = "YOUR-TFSTATE-STORAGE-ACCOUNT-ID"
+
+# ============================================================
+# COST GUARDRAIL
+# ============================================================
+
+monthly_budget_amount = 75
+budget_start_date     = "2026-10-01T00:00:00Z"
+budget_contact_emails = ["you@example.com"]
