@@ -1,0 +1,8 @@
+region      = "ap-south-1"
+environment = "dev"
+
+github_owner      = "SrinidhiSanjeevi"
+github_repository = "app_Homeease"
+
+monthly_budget_amount = "50"
+budget_contact_emails = ["you@example.com"]
