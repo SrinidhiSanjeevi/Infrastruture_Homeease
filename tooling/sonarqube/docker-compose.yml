@@ -1,0 +1,108 @@
+# ============================================================
+# Self-hosted SonarQube Community Edition
+#
+# Both azure-pipelines.yml (app_Homeease) and .github/workflows/
+# aws-ci.yml reference a SONAR_HOST_URL + SONAR_TOKEN. Neither
+# pipeline can pass its Validate stage until something is actually
+# listening at that URL.
+#
+# WHY SELF-HOSTED, NOT SONARCLOUD:
+# SonarCloud (SonarQube Cloud) is free only for PUBLIC repositories.
+# app_Homeease and Infrastruture_Homeease are private, so SonarCloud
+# would need a paid plan (or a 14-day trial that expires). SonarQube
+# Community Edition is Apache-2.0, free forever, no seat/repo limit —
+# the correct "free trial credit doesn't run out" choice for a
+# private-repo capstone. This is what ANALYSIS.md assumes is already
+# running; it wasn't, so this fills that gap.
+#
+# WHERE TO RUN THIS:
+# Microsoft-hosted ADO agents and GitHub-hosted runners are ephemeral
+# and cannot reach a container on your laptop. Run this on a small,
+# ALWAYS-ON host that both CI providers can reach over HTTPS:
+#   * cheapest: a single free-tier-eligible VM (Azure B1s / AWS
+#     t3.micro/t2.micro), reverse-proxied with a real TLS cert
+#     (Caddy or nginx + Let's Encrypt) and a strong SONAR_TOKEN —
+#     never expose the raw Sonar port to the internet.
+#   * once AKS/EKS exist: move this into the cluster (a Deployment +
+#     PVC + Ingress) and consider a self-hosted CI agent inside the
+#     same cluster network — ANALYSIS.md §7 recommends one anyway to
+#     reach Pushgateway, and it removes the "expose Sonar publicly"
+#     problem entirely.
+# Do NOT point CI at a SonarQube only reachable on localhost/a
+# private VPC unless your CI runners are also inside that network.
+#
+# ONE-TIME HOST PREREQUISITE (Elasticsearch, which SonarQube embeds,
+# refuses to start without this):
+#   sudo sysctl -w vm.max_map_count=262144
+#   echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
+#
+# H2 (SonarQube's default embedded database) is explicitly
+# unsupported for anything beyond a five-minute evaluation and does
+# not survive a container recreate. Postgres is mandatory here, not
+# optional hardening.
+# ============================================================
+
+name: homeease-sonarqube
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: sonarqube-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:?set SONAR_DB_PASSWORD in .env — do not commit a real value}
+      POSTGRES_DB: sonarqube
+    volumes:
+      - sonarqube_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonarqube"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sonarqube:
+    # Pinned to a specific build, not the floating `community` tag —
+    # same "never a moving reference" discipline as the CI pipelines'
+    # trivy/gitleaks/hadolint/syft/cosign pins.
+    image: sonarqube:26.9.0.129388-community
+    container_name: sonarqube
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:?set SONAR_DB_PASSWORD in .env}
+      # Trial-credit sizing. Raise if the Compute Engine OOMs on a
+      # larger codebase; do not raise pre-emptively.
+      SONAR_WEB_JAVAOPTS: -Xmx512m -Xms256m
+      SONAR_CE_JAVAOPTS: -Xmx512m -Xms256m
+      SONAR_SEARCH_JAVAOPTS: -Xmx512m -Xms256m
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
+      nproc: 8192
+    ports:
+      # Bind to localhost only. Put a TLS-terminating reverse proxy
+      # (Caddy/nginx) in front for the address CI actually calls —
+      # never point SONAR_HOST_URL at plain HTTP on the open internet.
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/api/system/status | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+volumes:
+  sonarqube_postgres_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
