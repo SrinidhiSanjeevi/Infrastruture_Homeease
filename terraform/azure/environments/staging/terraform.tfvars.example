@@ -1,4 +1,4 @@
-environment = "test"
+environment = "staging"
 
 project_name = "homeease"
 
@@ -16,9 +16,13 @@ aks_sku_tier = "Free"
 
 # ============================================================
 # ACR
+#
+# Basic, not Premium. Premium (~$50/mo) buys geo-replication,
+# private endpoints and content trust — none of which staging
+# needs. See ANALYSIS.md §2/§8.
 # ============================================================
 
-acr_sku = "Premium"
+acr_sku = "Basic"
 
 public_network_access_enabled = true
 
@@ -38,8 +42,28 @@ private_endpoint_subnet_prefix = [
   "10.20.4.0/24"
 ]
 
-tenant_id = "YOUR-AZURE-TENANT-ID"
+keyvault_sku = "standard"
+
+keyvault_public_network_access_enabled = true
 
 kubernetes_namespace = "homeease"
 
 service_account_name = "homeease"
+
+admin_object_id = "YOUR-AZURE-AD-ADMIN-OBJECT-ID"
+
+# ============================================================
+# CI IDENTITY (ci.tf) — GitHub Actions -> Terraform apply only.
+# No Azure DevOps / ACR push identity here: CI never builds images
+# for staging, it promotes the digest CI already built for dev.
+# ============================================================
+
+tfstate_storage_account_id = "YOUR-TFSTATE-STORAGE-ACCOUNT-ID"
+
+# ============================================================
+# COST GUARDRAIL
+# ============================================================
+
+monthly_budget_amount = 50
+budget_start_date     = "2026-10-01T00:00:00Z"
+budget_contact_emails = ["you@example.com"]
