@@ -1,0 +1,11 @@
+region      = "ap-south-1"
+environment = "prod"
+
+github_owner      = "SrinidhiSanjeevi"
+github_repository = "Infrastruture_Homeease"
+
+# terraform output oidc_provider_arn   (run inside aws/environments/dev)
+oidc_provider_arn = "arn:aws:iam::YOUR-ACCOUNT-ID:oidc-provider/token.actions.githubusercontent.com"
+
+monthly_budget_amount = "75"
+budget_contact_emails = ["you@example.com"]
