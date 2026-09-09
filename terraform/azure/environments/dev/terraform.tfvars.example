@@ -34,3 +34,22 @@ keyvault_public_network_access_enabled = true
 
 kubernetes_namespace = "homeease"
 service_account_name = "homeease"
+
+admin_object_id = "YOUR-AZURE-AD-ADMIN-OBJECT-ID"
+
+# ============================================================
+# CI IDENTITY (ci.tf)
+# ============================================================
+
+ado_organization_id        = "YOUR-ADO-ORGANIZATION-GUID"
+ado_organization_name      = "YOUR-ADO-ORG-NAME"
+ado_project_name           = "YOUR-ADO-PROJECT-NAME"
+tfstate_storage_account_id = "YOUR-TFSTATE-STORAGE-ACCOUNT-ID"
+
+# ============================================================
+# COST GUARDRAIL
+# ============================================================
+
+monthly_budget_amount = 50
+budget_start_date     = "2026-10-01T00:00:00Z"
+budget_contact_emails = ["you@example.com"]
