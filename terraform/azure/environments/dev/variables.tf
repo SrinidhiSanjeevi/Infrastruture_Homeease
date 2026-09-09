@@ -4,11 +4,11 @@ variable "environment" {
 
   validation {
     condition = contains(
-      ["dev", "test", "prod"],
+      ["dev", "staging", "prod"],
       var.environment
     )
 
-    error_message = "Environment must be dev, test, or prod."
+    error_message = "Environment must be dev, staging, or prod."
   }
 }
 
@@ -161,4 +161,56 @@ variable "service_account_name" {
 variable "admin_object_id" {
   description = "Azure AD object ID of the admin managing Key Vault secrets manually."
   type        = string
+}
+
+# ============================================================
+# CI IDENTITY (see ci.tf) — Azure DevOps + GitHub Actions federation
+# ============================================================
+
+variable "ado_organization_id" {
+  description = <<-EOT
+    Azure DevOps ORGANIZATION ID (a GUID), not the org name.
+    Find it at: https://dev.azure.com/<org>/_apis/connectionData
+    -> instanceId.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "ado_organization_name" {
+  description = "Azure DevOps organization name."
+  type        = string
+  default     = null
+}
+
+variable "ado_project_name" {
+  description = "Azure DevOps project name."
+  type        = string
+  default     = null
+}
+
+variable "tfstate_storage_account_id" {
+  description = "Resource ID of the bootstrap Terraform state storage account. Grants the CI identity Storage Blob Data Contributor so it can plan/apply this environment from GitHub Actions."
+  type        = string
+  default     = null
+}
+
+# ============================================================
+# COST GUARDRAIL (see ci.tf)
+# ============================================================
+
+variable "monthly_budget_amount" {
+  description = "Monthly budget in the billing currency for this environment's resource group."
+  type        = number
+  default     = 50
+}
+
+variable "budget_start_date" {
+  description = "Budget start date. Must be the first of a month, RFC3339, e.g. 2026-10-01T00:00:00Z."
+  type        = string
+}
+
+variable "budget_contact_emails" {
+  description = "Who receives budget alerts."
+  type        = list(string)
 }
