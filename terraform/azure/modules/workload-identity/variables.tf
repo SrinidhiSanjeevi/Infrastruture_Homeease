@@ -29,8 +29,23 @@ variable "namespace" {
 }
 
 variable "service_account_name" {
-  description = "Kubernetes service account associated with the workload identity."
+  description = "Primary Kubernetes service account associated with the workload identity."
   type        = string
+}
+
+variable "additional_service_accounts" {
+  description = <<-EOT
+    Extra (namespace, service_account_name) pairs that should be able
+    to federate against this SAME identity — for services that
+    deliberately share access, not a general-purpose list. A service
+    that needs its own blast radius gets its own module instance
+    instead of an entry here.
+  EOT
+  type = list(object({
+    namespace            = string
+    service_account_name = string
+  }))
+  default = []
 }
 
 variable "key_vault_id" {

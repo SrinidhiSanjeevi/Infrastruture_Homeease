@@ -52,9 +52,9 @@ keyvault_sku = "standard"
 
 keyvault_public_network_access_enabled = true
 
-kubernetes_namespace = "homeease"
+kubernetes_namespace = "homeease-prod"
 
-service_account_name = "homeease"
+service_account_name = "backend"
 
 admin_object_id = "YOUR-AZURE-AD-ADMIN-OBJECT-ID"
 
