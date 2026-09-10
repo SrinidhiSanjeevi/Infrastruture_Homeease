@@ -46,6 +46,38 @@ resource "azurerm_federated_identity_credential" "homeease" {
 }
 
 # ============================================================
+# ADDITIONAL FEDERATED SERVICE ACCOUNTS — same identity, same
+# Key Vault access, a different Kubernetes ServiceAccount.
+#
+# For services that legitimately share the same secrets and the
+# same blast radius (backend + admin-backend both read mongo-uri /
+# jwt-secret / email-*), one identity federated for two ServiceAccount
+# names is simpler than two identities that would end up with
+# identical RBAC anyway. A service that needs an actually SEPARATE
+# blast radius (payment-service) gets its OWN module instance
+# instead of an entry here — see environments/dev/main.tf.
+# ============================================================
+
+resource "azurerm_federated_identity_credential" "additional" {
+  for_each = {
+    for sa in var.additional_service_accounts :
+    "${sa.namespace}/${sa.service_account_name}" => sa
+  }
+
+  name = "${var.federated_credential_name}-${each.value.service_account_name}"
+
+  user_assigned_identity_id = azurerm_user_assigned_identity.homeease.id
+
+  issuer = var.aks_oidc_issuer_url
+
+  subject = "system:serviceaccount:${each.value.namespace}:${each.value.service_account_name}"
+
+  audience = [
+    "api://AzureADTokenExchange"
+  ]
+}
+
+# ============================================================
 # Key Vault Access
 # ============================================================
 #

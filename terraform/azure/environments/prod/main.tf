@@ -100,14 +100,46 @@ module "keyvault" {
 
 # ============================================================
 # AKS WORKLOAD IDENTITY
+#
+# Two identities, not one, because Key Vault RBAC is granted at the
+# VAULT level — Azure has no built-in per-secret role scoping. That
+# means a shared identity is fine for services that are meant to see
+# the same secrets, but doesn't buy any real isolation on its own.
+#
+#   workload_identity_app     -> ServiceAccounts "backend" AND
+#                                 "admin-backend". Both already read
+#                                 mongo-uri/jwt-secret/email-* (see
+#                                 modules/keyvault/SECRETS.md) — one
+#                                 identity, one blast radius, matches
+#                                 reality instead of pretending they're
+#                                 isolated when they're not.
+#
+#   workload_identity_payment -> ServiceAccount "payment-service"
+#                                 ONLY. Same Key Vault for now (see
+#                                 the trade-off note below), but its
+#                                 OWN identity means: (a) Key Vault
+#                                 diagnostic logs show a distinct
+#                                 principal for payment's reads, not
+#                                 blended into backend's traffic, and
+#                                 (b) the day a payment-only Key Vault
+#                                 is added, only THIS block's
+#                                 key_vault_id changes — backend/
+#                                 admin-backend are untouched.
+#
+# Namespace: matches the GitOps repo's namespace-per-environment
+# design (homeease-dev / homeease-staging / homeease-prod), NOT a
+# single shared "homeease" namespace — that was the bug (Terraform
+# and the GitOps repo targeting different namespaces, so no pod could
+# actually authenticate). var.kubernetes_namespace must be set to
+# "homeease-${var.environment}" in tfvars for this to line up.
 # ============================================================
 
-module "workload_identity" {
+module "workload_identity_app" {
   source = "../../modules/workload-identity"
 
-  identity_name = "id-homeease-${var.environment}"
+  identity_name = "id-homeease-app-${var.environment}"
 
-  federated_credential_name = "fic-homeease-${var.environment}"
+  federated_credential_name = "fic-homeease-app-${var.environment}"
 
   resource_group_name = module.resource_group.name
 
@@ -116,11 +148,42 @@ module "workload_identity" {
   aks_oidc_issuer_url = module.aks.oidc_issuer_url
 
   namespace            = var.kubernetes_namespace
-  service_account_name = var.service_account_name
+  service_account_name = var.service_account_name # "backend"
+  additional_service_accounts = [
+    {
+      namespace            = var.kubernetes_namespace
+      service_account_name = "admin-backend"
+    }
+  ]
 
   key_vault_id    = module.keyvault.id
   admin_object_id = var.admin_object_id
 
+  tags = local.common_tags
+}
+
+module "workload_identity_payment" {
+  source = "../../modules/workload-identity"
+
+  identity_name = "id-homeease-payment-${var.environment}"
+
+  federated_credential_name = "fic-homeease-payment-${var.environment}"
+
+  resource_group_name = module.resource_group.name
+
+  location = var.location
+
+  aks_oidc_issuer_url = module.aks.oidc_issuer_url
+
+  namespace            = var.kubernetes_namespace
+  service_account_name = "payment-service"
+
+  # TODO (future hardening, not done here): a SEPARATE Key Vault
+  # scoped to only payment-service's secrets is what actually
+  # achieves isolation, since RBAC is vault-wide. Sharing the vault
+  # for now is a documented, deliberate trade-off — not an oversight.
+  key_vault_id    = module.keyvault.id
+  admin_object_id = var.admin_object_id
 
   tags = local.common_tags
 }

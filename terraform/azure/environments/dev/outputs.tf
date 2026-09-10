@@ -63,12 +63,22 @@ output "key_vault_name" {
   value       = module.keyvault.name
 }
 
-output "workload_identity_client_id" {
-  description = "Client ID of the HomeEase workload identity."
-  value       = module.workload_identity.client_id
+output "workload_identity_app_client_id" {
+  description = "Client ID for backend + admin-backend's shared workload identity. Set as workloadIdentity.clientId in gitops_homeease/apps/{backend,admin-backend}/values.yaml."
+  value       = module.workload_identity_app.client_id
 }
 
-output "workload_identity_principal_id" {
-  description = "Principal ID of the HomeEase workload identity."
-  value       = module.workload_identity.principal_id
+output "workload_identity_app_principal_id" {
+  description = "Principal ID of the backend + admin-backend workload identity."
+  value       = module.workload_identity_app.principal_id
+}
+
+output "workload_identity_payment_client_id" {
+  description = "Client ID for payment-service's dedicated workload identity. Set as workloadIdentity.clientId in gitops_homeease/apps/payment-service/values.yaml."
+  value       = module.workload_identity_payment.client_id
+}
+
+output "workload_identity_payment_principal_id" {
+  description = "Principal ID of the payment-service workload identity."
+  value       = module.workload_identity_payment.principal_id
 }
