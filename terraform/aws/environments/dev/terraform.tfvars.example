@@ -4,5 +4,25 @@ environment = "dev"
 github_owner      = "SrinidhiSanjeevi"
 github_repository = "app_Homeease"
 
-monthly_budget_amount = "50"
+# ~$135/month baseline once EKS + networking are applied (control
+# plane + 1 NAT Gateway + 1 node) — set this to what you're actually
+# willing to spend, not the registry-only "50" from before EKS existed.
+monthly_budget_amount = "150"
 budget_contact_emails = ["you@example.com"]
+
+# Networking — defaults are fine unless these CIDRs collide with
+# something else you're peering/VPNing to.
+vpc_cidr             = "10.20.0.0/16"
+public_subnet_cidrs  = ["10.20.0.0/20", "10.20.16.0/20"]
+private_subnet_cidrs = ["10.20.128.0/20", "10.20.144.0/20"]
+
+# EKS
+kubernetes_version   = "1.31"
+node_instance_types  = ["t3.medium"]
+node_desired_size    = 1
+node_min_size        = 1
+node_max_size        = 3
+
+# Must match the namespace gitops_homeease's
+# apps/payment-service/overlays/aws/dev/ deploys into.
+kubernetes_namespace = "homeease-dev"
