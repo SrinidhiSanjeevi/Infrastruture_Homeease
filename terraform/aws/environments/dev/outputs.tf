@@ -42,3 +42,28 @@ output "repository_urls" {
 output "repository_arns" {
   value = module.ecr.repository_arns
 }
+
+# ============================================================
+# EKS / GitOps hand-off — these become the placeholders you fill in
+# across gitops_homeease/apps/*/overlays/aws/dev/ and
+# argocd/aws/bootstrap/.
+# ============================================================
+
+output "cluster_name" {
+  value = module.eks.cluster_name
+}
+
+output "configure_kubectl" {
+  description = "Run this once to point kubectl at the new cluster."
+  value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
+}
+
+output "irsa_payment_role_arn" {
+  description = "Set as the eks.amazonaws.com/role-arn annotation in apps/payment-service/overlays/aws/dev/kustomization.yaml (REPLACE-WITH-IAM-ROLE-ARN)."
+  value       = module.irsa_payment.role_arn
+}
+
+output "payment_secret_arns" {
+  description = "Confirms the exact Secrets Manager names to use in apps/payment-service/overlays/aws/dev/secretproviderclass.yaml's objectName fields."
+  value       = module.payment_secrets.secret_arns
+}

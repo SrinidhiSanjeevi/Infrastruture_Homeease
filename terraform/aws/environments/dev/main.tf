@@ -1,22 +1,25 @@
 # ============================================================
-# AWS — CI/registry scope only
+# AWS — full stack: registry, CI identity, VPC, and EKS.
 #
-# Deliberately stops at the registry and the CI identity: no VPC, no
-# EKS, no NAT Gateway. Those are the expensive parts, and there is no
-# reason to create them before the pipeline that feeds them works.
-# See ANALYSIS.md §8-9.
+# This started as CI/registry-only (no VPC, no EKS, no NAT Gateway —
+# see git history / ANALYSIS.md §8-9 for that reasoning) so the image
+# pipeline could exist and be tested before paying for the expensive
+# parts. This is that second phase: a real cluster, mirroring
+# terraform/azure's AKS stack resource-for-resource (VPC ~ VNet, EKS ~
+# AKS, IRSA ~ Workload Identity, Secrets Manager ~ Key Vault).
 #
-# What this costs to run: effectively nothing. ECR storage for a
-# handful of images is cents per month, IAM is free, and the OIDC
-# provider is free. Leave this applied permanently; create EKS only
-# on the days you demo.
+# What this costs to run, roughly, once applied: EKS control plane
+# ~$73/month (flat, no free tier) + one NAT Gateway ~$32/month + one
+# t3.medium node ~$30/month ≈ $135/month baseline BEFORE autoscaling
+# past 1 node. That's already well past the $50 budget default below
+# — raise monthly_budget_amount in terraform.tfvars before applying,
+# or destroy the eks/networking modules between demos the same way the
+# original comment here suggested doing for all of EKS.
 #
-# THIS is also the ONLY environment that owns the ECR repositories
-# and the GitHub OIDC provider. Both are account-wide singletons —
-# ECR repository names are unique per AWS account regardless of which
-# Terraform state created them, and only one OIDC provider for a
-# given URL may exist per account. staging/prod do NOT re-declare
-# module.ecr; see their own main.tf for why.
+# THIS is also the ONLY environment that owns the ECR repositories,
+# the GitHub OIDC provider, the VPC, and the EKS cluster. All are
+# account-wide or environment-defining singletons; staging/prod do NOT
+# re-declare module.ecr or module.eks — see their own main.tf for why.
 # ============================================================
 
 locals {
@@ -26,6 +29,90 @@ locals {
     managed_by  = "terraform"
     owner       = "homeease"
   }
+
+  cluster_name = "eks-homeease-${var.environment}"
+}
+
+# ============================================================
+# NETWORKING
+# ============================================================
+
+module "networking" {
+  source = "../../modules/networking"
+
+  environment  = var.environment
+  cluster_name = local.cluster_name
+
+  vpc_cidr             = var.vpc_cidr
+  public_subnet_cidrs  = var.public_subnet_cidrs
+  private_subnet_cidrs = var.private_subnet_cidrs
+
+  tags = local.common_tags
+}
+
+# ============================================================
+# EKS
+# ============================================================
+
+module "eks" {
+  source = "../../modules/eks"
+
+  cluster_name       = local.cluster_name
+  kubernetes_version = var.kubernetes_version
+
+  private_subnet_ids = module.networking.private_subnet_ids
+  public_subnet_ids  = module.networking.public_subnet_ids
+
+  node_instance_types = var.node_instance_types
+  node_desired_size   = var.node_desired_size
+  node_min_size       = var.node_min_size
+  node_max_size       = var.node_max_size
+
+  tags = local.common_tags
+}
+
+# ============================================================
+# SECRETS MANAGER — payment-service's Razorpay credentials only. See
+# modules/secrets/SECRETS.md for how the values themselves get set
+# (never by Terraform).
+# ============================================================
+
+module "payment_secrets" {
+  source = "../../modules/secrets"
+
+  name_prefix  = "homeease/${var.environment}/payment-service"
+  secret_names = var.payment_secret_names
+
+  tags = local.common_tags
+}
+
+# ============================================================
+# IRSA — payment-service's own IAM role, own blast radius. Mirrors
+# module.workload_identity_payment on the Azure side exactly, down to
+# the same TODO: this shares nothing with backend/admin-backend by
+# design (payment-service is the one place a mistake has a real
+# financial consequence — see gitops_homeease's
+# apps/payment-service/base/networkpolicy.yaml for the rest of that
+# reasoning).
+# ============================================================
+
+module "irsa_payment" {
+  source = "../../modules/irsa"
+
+  role_name = "homeease-${var.environment}-payment-service"
+
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+
+  # Matches the GitOps repo's namespace-per-environment design
+  # (homeease-dev / homeease-staging / homeease-prod) — see
+  # gitops_homeease/apps/payment-service/overlays/aws/dev/kustomization.yaml.
+  namespace            = var.kubernetes_namespace
+  service_account_name = "payment-service"
+
+  secret_arns = values(module.payment_secrets.secret_arns)
+
+  tags = local.common_tags
 }
 
 # ============================================================
@@ -46,6 +133,12 @@ module "ecr" {
 
   # Convenient on a trial account. Set false once anything matters.
   force_delete = true
+
+  # The node role only — IRSA (module.irsa_payment) handles
+  # application identity for secrets, not image pulls. Pods never pull
+  # their own images; the kubelet does, using the node's role, before
+  # any pod (and therefore any ServiceAccount) exists.
+  pull_principal_arns = [module.eks.node_role_arn]
 
   tags = local.common_tags
 }
