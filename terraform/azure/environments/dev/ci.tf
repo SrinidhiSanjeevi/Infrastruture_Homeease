@@ -25,7 +25,14 @@ module "ci_identity" {
   acr_id = module.acr.id
 
   # ── Azure DevOps (app repo -> ACR) ──────────────────────
-  enable_azure_devops = true
+  # Temporarily OFF: ado_organization_id in terraform.tfvars is still a
+  # placeholder ("REPLACE-AFTER-ADO-CHECK") — that org requires sign-in,
+  # so the real GUID has to come from a browser session or `az devops`,
+  # not an anonymous curl. Leaving this "true" with a placeholder GUID
+  # would NOT fail apply; it would silently create a federated-identity
+  # trust for a nonexistent issuer that Azure DevOps could never
+  # actually use. Flip back to true once ado_organization_id is real.
+  enable_azure_devops = false
 
   # GUID, not the org name. Get it from:
   #   https://dev.azure.com/<org>/_apis/connectionData  -> instanceId
