@@ -53,3 +53,18 @@ tfstate_storage_account_id = "YOUR-TFSTATE-STORAGE-ACCOUNT-ID"
 monthly_budget_amount = 50
 budget_start_date     = "2026-10-01T00:00:00Z"
 budget_contact_emails = ["you@example.com"]
+
+# ============================================================
+# SONARQUBE VM
+# ============================================================
+
+# `cat ~/.ssh/id_rsa.pub` (generate one with `ssh-keygen` if you don't have one)
+sonarqube_admin_ssh_public_key = "ssh-ed25519 AAAA... you@yourmachine"
+
+# `curl ifconfig.me` — your own IP, as a /32. Never 0.0.0.0/0.
+sonarqube_admin_ssh_source_cidr = "YOUR-IP-ADDRESS/32"
+
+# Leave unset to use the free nip.io hostname. Set to a real domain
+# you own (and point its A record at the sonarqube_public_ip output
+# after apply) once you have one.
+# sonarqube_dns_label = "sonarqube.yourdomain.com"

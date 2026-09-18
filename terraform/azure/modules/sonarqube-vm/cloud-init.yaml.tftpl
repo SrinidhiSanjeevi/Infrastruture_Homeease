@@ -1,0 +1,184 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+
+write_files:
+  # SonarQube's bundled Elasticsearch refuses to start below this —
+  # not optional, not a tuning knob.
+  - path: /etc/sysctl.d/99-sonarqube.conf
+    content: |
+      vm.max_map_count=262144
+      fs.file-max=131072
+
+  - path: /opt/sonarqube/Caddyfile
+    content: |
+      ${fqdn} {
+        # "sonarqube" is the Docker Compose SERVICE NAME, resolved via the
+        # sonarnet network's embedded DNS — NOT a host address. Caddy and
+        # sonarqube are separate containers; 127.0.0.1 from inside the
+        # Caddy container is the Caddy container itself; nothing listens
+        # on port 9000 there, which is why that used to fail with
+        # "dial tcp 127.0.0.1:9000: connect: connection refused".
+        reverse_proxy sonarqube:9000
+      }
+
+  - path: /opt/sonarqube/docker-compose.yml
+    content: |
+      services:
+        postgres:
+          image: postgres:16
+          restart: unless-stopped
+          environment:
+            POSTGRES_DB: sonarqube
+            POSTGRES_USER: sonarqube
+            POSTGRES_PASSWORD: $${POSTGRES_PASSWORD}
+          volumes:
+            - /data/postgres:/var/lib/postgresql/data
+          networks: [sonarnet]
+          # No ports: block — reachable only from other containers on
+          # sonarnet, never from the host's public interface.
+
+        sonarqube:
+          image: sonarqube:lts-community
+          restart: unless-stopped
+          depends_on: [postgres]
+          environment:
+            SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonarqube
+            SONAR_JDBC_USERNAME: sonarqube
+            SONAR_JDBC_PASSWORD: $${POSTGRES_PASSWORD}
+          volumes:
+            - /data/sonarqube/data:/opt/sonarqube/data
+            - /data/sonarqube/extensions:/opt/sonarqube/extensions
+            - /data/sonarqube/logs:/opt/sonarqube/logs
+          ports:
+            # Bound to loopback only — Caddy is the sole public path in.
+            - "127.0.0.1:9000:9000"
+          networks: [sonarnet]
+
+        caddy:
+          image: caddy:2
+          restart: unless-stopped
+          ports:
+            - "80:80"
+            - "443:443"
+          volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile
+            - caddy_data:/data
+            - caddy_config:/config
+          networks: [sonarnet]
+
+      networks:
+        sonarnet:
+
+      volumes:
+        caddy_data:
+        caddy_config:
+
+  - path: /opt/sonarqube/backup.sh
+    permissions: '0700'
+    content: |
+      #!/usr/bin/env bash
+      # Nightly Postgres dump -> Azure Blob Storage, via the VM's own
+      # Managed Identity (AZCOPY_AUTO_LOGIN_TYPE=MSI) — no key, no
+      # connection string, nothing that could leak from this script.
+      set -euo pipefail
+      cd /opt/sonarqube
+
+      TS=$(date -u +%Y%m%dT%H%M%SZ)
+      DUMP="/tmp/sonarqube-$${TS}.sql.gz"
+
+      docker compose exec -T postgres pg_dump -U sonarqube sonarqube | gzip > "$${DUMP}"
+
+      AZCOPY_AUTO_LOGIN_TYPE=MSI azcopy copy "$${DUMP}" \
+        "https://${storage_account_name}.blob.core.windows.net/${backup_container}/$${TS}.sql.gz"
+
+      rm -f "$${DUMP}"
+      echo "Backup uploaded: $${TS}.sql.gz"
+
+  - path: /etc/systemd/system/sonarqube-backup.service
+    content: |
+      [Unit]
+      Description=SonarQube Postgres backup to Blob Storage
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/sonarqube/backup.sh
+
+  - path: /etc/systemd/system/sonarqube-backup.timer
+    content: |
+      [Unit]
+      Description=Nightly SonarQube Postgres backup
+
+      [Timer]
+      OnCalendar=*-*-* 02:00:00
+      Persistent=true
+      RandomizedDelaySec=600
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  - sysctl --system
+
+  # ── Mount the data disk ──────────────────────────────────────
+  # Azure attaches this VM's data disks async to VM creation, so the
+  # device can legitimately not exist yet the moment cloud-init runs.
+  # Wait for the STABLE by-lun path (never /dev/sdX, which can shift)
+  # rather than failing on first check.
+  - |
+    DEV=/dev/disk/azure/scsi1/lun0
+    for i in $(seq 1 60); do
+      [ -e "$DEV" ] && break
+      echo "Waiting for data disk at $DEV ($i/60)..."
+      sleep 5
+    done
+    if [ ! -e "$DEV" ]; then
+      echo "ERROR: data disk never appeared at $DEV — check the azurerm_virtual_machine_data_disk_attachment" >&2
+      exit 1
+    fi
+    if ! blkid "$DEV" >/dev/null 2>&1; then
+      mkfs.ext4 -F "$DEV"
+    fi
+    mkdir -p /data
+    grep -q "$DEV" /etc/fstab || echo "$DEV /data ext4 defaults,nofail 0 2" >> /etc/fstab
+    mount -a
+    mkdir -p /data/sonarqube/data /data/sonarqube/extensions /data/sonarqube/logs /data/postgres
+
+    # The sonarqube:lts-community image runs as uid 1000, postgres:16 as
+    # uid 999 — both non-root. Without this, first boot leaves these
+    # bind mounts root-owned and both containers crash-loop with
+    # AccessDeniedException/permission-denied on their data dirs.
+    # Safe to re-run: chown -R is idempotent.
+    chown -R 1000:1000 /data/sonarqube
+    chown -R 999:999 /data/postgres
+
+  # ── Generate the DB password LOCALLY — never passed through
+  #    Terraform, never in state, never in Git. ──────────────────
+  - |
+    if [ ! -f /opt/sonarqube/.env ]; then
+      echo "POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')" > /opt/sonarqube/.env
+      chmod 600 /opt/sonarqube/.env
+    fi
+
+  # ── azcopy (static binary, supports MSI auth directly) ──────────
+  - |
+    if ! command -v azcopy >/dev/null 2>&1; then
+      curl -fsSL -o /tmp/azcopy.tar.gz "https://aka.ms/downloadazcopy-v10-linux"
+      mkdir -p /tmp/azcopy-extract
+      tar -xzf /tmp/azcopy.tar.gz -C /tmp/azcopy-extract --strip-components=1
+      mv /tmp/azcopy-extract/azcopy /usr/local/bin/azcopy
+      chmod +x /usr/local/bin/azcopy
+    fi
+
+  - systemctl enable --now docker
+
+  - |
+    cd /opt/sonarqube
+    docker compose up -d
+
+  - systemctl daemon-reload
+  - systemctl enable --now sonarqube-backup.timer
