@@ -82,3 +82,16 @@ output "workload_identity_payment_principal_id" {
   description = "Principal ID of the payment-service workload identity."
   value       = module.workload_identity_payment.principal_id
 }
+
+output "sonarqube_url" {
+  description = "Browse here after apply (allow a few minutes for cloud-init to finish). Use this as the SonarQube service connection URL in Azure DevOps."
+  value       = "https://${module.sonarqube.fqdn}"
+}
+
+output "sonarqube_public_ip" {
+  value = module.sonarqube.public_ip
+}
+
+output "sonarqube_backup_storage_account" {
+  value = module.sonarqube.backup_storage_account_name
+}
