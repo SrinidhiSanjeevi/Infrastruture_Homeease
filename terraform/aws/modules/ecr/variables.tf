@@ -7,7 +7,7 @@ variable "namespace" {
 variable "services" {
   description = "Service names. One ECR repository is created per entry."
   type        = list(string)
-  default     = ["backend", "admin-backend", "frontend", "payment-service"]
+  default     = ["backend", "admin-backend", "frontend", "admin-frontend", "payment-service"]
 }
 
 variable "retained_image_count" {

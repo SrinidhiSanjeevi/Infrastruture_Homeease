@@ -123,7 +123,7 @@ module "ecr" {
   source = "../../modules/ecr"
 
   namespace = "homeease"
-  services  = ["backend", "admin-backend", "frontend", "payment-service"]
+  services  = ["backend", "admin-backend", "frontend", "admin-frontend", "payment-service"]
 
   retained_image_count = 15
 
