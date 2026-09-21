@@ -41,3 +41,9 @@ resource "azurerm_storage_container" "professionals" {
   storage_account_id    = azurerm_storage_account.images.id
   container_access_type = "private"
 }
+
+resource "azurerm_role_assignment" "blob_data_contributor" {
+  scope                = azurerm_storage_account.images.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = var.workload_identity_principal_id
+}

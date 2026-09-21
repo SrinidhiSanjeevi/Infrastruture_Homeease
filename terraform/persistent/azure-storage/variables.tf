@@ -14,3 +14,8 @@ variable "storage_account_name" {
   description = "Globally unique Azure Storage Account name."
   type        = string
 }
+
+variable "workload_identity_principal_id" {
+  description = "Principal (object) ID of the AKS workload identity managed identity."
+  type        = string
+}

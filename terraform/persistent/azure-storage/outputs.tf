@@ -25,3 +25,8 @@ output "service_container_name" {
 output "professional_container_name" {
   value = azurerm_storage_container.professionals.name
 }
+
+output "blob_rbac_principal_id" {
+  description = "Principal ID granted Storage Blob Data Contributor."
+  value       = azurerm_role_assignment.blob_data_contributor.principal_id
+}
