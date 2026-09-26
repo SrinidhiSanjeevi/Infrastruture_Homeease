@@ -119,6 +119,22 @@ resource "azuread_application_federated_identity_credential" "github_main" {
   subject   = "repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/main"
 }
 
+# .github/workflows/terraform.yml runs each job in a GitHub Environment
+# (environment: dev|staging|prod). GitHub then issues the token with an
+# environment subject, NOT the branch subject above — without this
+# credential azure/login fails with AADSTS70021 (no matching credential).
+resource "azuread_application_federated_identity_credential" "github_environment" {
+  count = var.enable_github && var.github_environment != null ? 1 : 0
+
+  application_id = azuread_application.ci.id
+  display_name   = "github-${var.github_repository}-env-${var.github_environment}"
+  description    = "GitHub Actions jobs running in the ${var.github_environment} GitHub Environment"
+
+  audiences = ["api://AzureADTokenExchange"]
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = "repo:${var.github_owner}/${var.github_repository}:environment:${var.github_environment}"
+}
+
 resource "azuread_application_federated_identity_credential" "github_pr" {
   count = var.enable_github && var.enable_github_pull_request ? 1 : 0
 
