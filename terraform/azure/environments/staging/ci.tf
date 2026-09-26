@@ -24,6 +24,8 @@ module "ci_identity" {
   enable_github     = true
   github_owner      = "SrinidhiSanjeevi"
   github_repository = "Infrastruture_Homeease"
+  # Matches `environment: ${{ matrix.env }}` in .github/workflows/terraform.yml.
+  github_environment = var.environment
 
   # Same trade-off as dev: one identity, both main (apply) and PR
   # (plan) trust it. See dev/ci.tf for the stricter two-identity

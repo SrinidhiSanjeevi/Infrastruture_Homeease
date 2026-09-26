@@ -69,6 +69,12 @@ variable "github_repository" {
   default     = null
 }
 
+variable "github_environment" {
+  description = "GitHub Environment name the CI job runs in (trusts subject repo:<owner>/<repo>:environment:<name>). null = no environment credential."
+  type        = string
+  default     = null
+}
+
 variable "enable_github_pull_request" {
   description = "Also trust the pull_request subject. Only enable for an identity that has READ permissions only."
   type        = bool

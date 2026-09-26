@@ -1,15 +1,5 @@
-# ============================================================
-# MISSING FILE — this is finding #5 in ANALYSIS.md.
-#
-# terraform/azure/environments/prod/ currently has NO backend
-# block, so Terraform defaults to LOCAL state. On a CI runner that
-# state file is created, used, and thrown away with the workspace.
-# The next run has no record of what exists and tries to create
-# everything again — which fails on globally-unique names (the ACR)
-# and silently orphans whatever did succeed.
-#
-# Only the `key` differs between environments.
-# ============================================================
+# Remote state for prod. Same storage account and container as dev
+# (bootstrap output); only the key differs per environment.
 
 terraform {
   backend "azurerm" {

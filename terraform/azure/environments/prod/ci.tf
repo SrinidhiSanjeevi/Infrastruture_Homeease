@@ -25,6 +25,8 @@ module "ci_identity" {
   enable_github     = true
   github_owner      = "SrinidhiSanjeevi"
   github_repository = "Infrastruture_Homeease"
+  # Matches `environment: ${{ matrix.env }}` in .github/workflows/terraform.yml.
+  github_environment = var.environment
 
   enable_github_pull_request = false
 
