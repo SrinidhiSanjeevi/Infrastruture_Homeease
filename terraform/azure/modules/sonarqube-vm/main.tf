@@ -160,7 +160,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "data" {
 # ============================================================
 
 resource "azurerm_storage_account" "backup" {
-  name                = "stsonarbkp${var.environment}${substr(md5(var.resource_group_name), 0, 6)}"
+  name                = "stsonarbkp${var.environment}${substr(md5("${var.resource_group_name}-01"), 0, 6)}" # "-01": old name still held by the expired subscription
   resource_group_name = var.resource_group_name
   location            = var.location
 

@@ -81,3 +81,18 @@ resource "azurerm_storage_container" "tfstate" {
   storage_account_id    = azurerm_storage_account.tfstate.id
   container_access_type = "private"
 }
+
+# ============================================================
+# State Data Access for the Bootstrapping User
+# ============================================================
+# Every azurerm backend uses use_azuread_auth = true, so whoever runs
+# `terraform init` needs a data-plane role on the account. Owner /
+# Contributor alone is not enough and gives a 403 on the state blob.
+
+data "azurerm_client_config" "current" {}
+
+resource "azurerm_role_assignment" "tfstate_blob_contributor" {
+  scope                = azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+}

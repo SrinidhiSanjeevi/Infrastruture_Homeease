@@ -175,7 +175,9 @@ resource "azurerm_role_assignment" "tfstate_contributor" {
 }
 
 resource "azurerm_role_assignment" "subscription_scope" {
-  count = var.subscription_role_scope != null ? 1 : 0
+  # A plain bool, not "scope != null": the scope is usually a resource
+  # group created in the same apply, so its ID is unknown at plan time.
+  count = var.enable_subscription_role_assignment ? 1 : 0
 
   scope                = var.subscription_role_scope
   role_definition_name = var.subscription_role_definition
