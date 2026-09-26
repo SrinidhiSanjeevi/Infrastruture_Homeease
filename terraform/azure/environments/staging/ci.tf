@@ -34,8 +34,9 @@ module "ci_identity" {
 
   # Scoped to THIS resource group, not the subscription and not
   # dev's or prod's resource group.
-  subscription_role_scope      = module.resource_group.id
-  subscription_role_definition = "Contributor"
+  enable_subscription_role_assignment = true
+  subscription_role_scope             = module.resource_group.id
+  subscription_role_definition        = "Contributor"
 }
 
 output "ci_client_id" {

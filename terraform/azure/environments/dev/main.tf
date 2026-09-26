@@ -36,7 +36,7 @@ module "networking" {
 module "acr" {
   source = "../../modules/acr"
 
-  name                = "acrhomeease${var.environment}"
+  name                = "acrhomeease${var.environment}01" # "01": old name still held by the expired subscription
   resource_group_name = module.resource_group.name
   location            = var.location
 
@@ -84,7 +84,7 @@ module "aks" {
 module "keyvault" {
   source = "../../modules/keyvault"
 
-  name                = "kv-${var.project_name}-${var.environment}-hs01"
+  name                = "kv-${var.project_name}-${var.environment}-hs02" # "hs02": hs01 is held (purge protection) by the expired subscription
   location            = var.location
   resource_group_name = module.resource_group.name
 

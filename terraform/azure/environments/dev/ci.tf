@@ -56,8 +56,9 @@ module "ci_identity" {
   tfstate_storage_account_id = var.tfstate_storage_account_id
 
   # Scoped to the resource group, not the subscription.
-  subscription_role_scope      = module.resource_group.id
-  subscription_role_definition = "Contributor"
+  enable_subscription_role_assignment = true
+  subscription_role_scope             = module.resource_group.id
+  subscription_role_definition        = "Contributor"
 }
 
 output "ci_client_id" {

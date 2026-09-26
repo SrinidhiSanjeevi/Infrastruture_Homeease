@@ -13,7 +13,7 @@ from console output, not from state.
 
 ```bash
 az keyvault secret set \
-  --vault-name kv-homeease-dev-hs01 \
+  --vault-name kv-homeease-dev-hs02 \
   --name mongo-uri \
   --value "<the real connection string>"
 ```

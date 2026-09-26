@@ -83,6 +83,12 @@ variable "tfstate_storage_account_id" {
   default     = null
 }
 
+variable "enable_subscription_role_assignment" {
+  description = "Grant subscription_role_definition at subscription_role_scope. Must be a literal so count is known at plan time."
+  type        = bool
+  default     = false
+}
+
 variable "subscription_role_scope" {
   description = "Scope for the Terraform apply role. Prefer a resource group ID over a subscription ID."
   type        = string

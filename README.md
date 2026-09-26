@@ -16,7 +16,7 @@ This repository contains the complete Infrastructure as Code (IaC) for **HomeEas
 │                                                                        │
 │  ┌────────────────┐   ┌────────────────┐   ┌────────────────────────┐  │
 │  │ Resource Group │   │  VNet/Subnets  │   │ ACR Container Registry │  │
-│  │ rg-homeease-dev│   │  & NSG Rules   │   │ acrhomeeasedev         │  │
+│  │ rg-homeease-dev│   │  & NSG Rules   │   │ acrhomeeasedev01       │  │
 │  └────────────────┘   └────────────────┘   └────────────────────────┘  │
 │          │                    │                         │              │
 │          ▼                    ▼                         ▼              │
@@ -32,7 +32,7 @@ This repository contains the complete Infrastructure as Code (IaC) for **HomeEas
 │          ▼                                              ▼              │
 │  ┌─────────────────────────────────┐      ┌─────────────────────────┐  │
 │  │  User Assigned Managed Identity │◄─────┤  Azure Key Vault (RBAC) │  │
-│  │  + Federated Credential (FIC)   │      │  kv-homeease-dev-hs01   │  │
+│  │  + Federated Credential (FIC)   │      │  kv-homeease-dev-hs02   │  │
 │  └─────────────────────────────────┘      └─────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -117,7 +117,7 @@ Infrastruture_Homeease/
 ---
 
 ### D. `modules/acr` (Azure Container Registry)
-* **What**: Private container registry (`acrhomeeasedev.azurecr.io`) with `Basic` SKU.
+* **What**: Private container registry (`acrhomeeasedev01.azurecr.io`) with `Basic` SKU.
 * **Why**: Secure, low-latency container image storage located in the same Azure region (`Central India`) as the AKS cluster.
 * **How it works**: Enables admin user disabled by default for zero-trust security; images are pulled by AKS using native Azure Managed Identity.
 
@@ -141,7 +141,7 @@ Infrastruture_Homeease/
 
 ### F. `modules/keyvault` & `modules/workload-identity` (Passwordless Secret Security)
 * **What**: 
-  - Azure Key Vault (`kv-homeease-dev-hs01`) with RBAC authorization, purge protection, and soft delete.
+  - Azure Key Vault (`kv-homeease-dev-hs02`) with RBAC authorization, purge protection, and soft delete.
   - User-Assigned Managed Identity (`id-homeease-dev`).
   - Federated Identity Credential (`fic-homeease-dev`) linking the Kubernetes ServiceAccount `homeease:homeease` with Azure Entra ID.
 * **Why**: **Completely eliminates hardcoded database passwords, API tokens, and JWT secrets from source code, Git, and container images.**
@@ -160,9 +160,9 @@ Terraform outputs the exact configuration parameters that the GitOps repository 
 
 | Terraform Output | Value (Dev) | Where Used in GitOps |
 |---|---|---|
-| `workload_identity_client_id` | `3e6bc199-1c53-401b-a1ea-1d0de3b82275` | Injected into `platform/serviceaccount.yaml` and `environments/dev/backend-values.yaml` |
-| `key_vault_name` | `kv-homeease-dev-hs01` | Injected into `platform/secretproviderclass.yaml` |
-| `acr_login_server` | `acrhomeeasedev.azurecr.io` | Injected into `charts/*/values.yaml` (`image.repository`) |
+| `workload_identity_app_client_id` | `9850ab0c-1f03-4a65-8f77-c4ff988a1af4` | Injected into `platform/serviceaccount.yaml` and `environments/dev/backend-values.yaml` |
+| `key_vault_name` | `kv-homeease-dev-hs02` | Injected into `platform/secretproviderclass.yaml` |
+| `acr_login_server` | `acrhomeeasedev01.azurecr.io` | Injected into `charts/*/values.yaml` (`image.repository`) |
 | `resource_group_name` | `rg-homeease-dev` | Injected into Key Vault CSI tenant configuration |
 
 ---
