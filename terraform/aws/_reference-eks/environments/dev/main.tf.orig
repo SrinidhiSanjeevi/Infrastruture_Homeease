@@ -1,25 +1,25 @@
 # ============================================================
-# AWS — registry, CI identity, VPC, and Secrets Manager containers.
+# AWS — full stack: registry, CI identity, VPC, and EKS.
 #
-# Compute-agnostic on purpose: this environment owns the resources any
-# compute layer needs (ECR, the GitHub OIDC provider + CI push role,
-# the VPC, Secrets Manager containers) but does NOT itself run any
-# containers. The two compute options both build on top of this file
-# rather than inside it:
+# This started as CI/registry-only (no VPC, no EKS, no NAT Gateway —
+# see git history / ANALYSIS.md §8-9 for that reasoning) so the image
+# pipeline could exist and be tested before paying for the expensive
+# parts. This is that second phase: a real cluster, mirroring
+# terraform/azure's AKS stack resource-for-resource (VPC ~ VNet, EKS ~
+# AKS, IRSA ~ Workload Identity, Secrets Manager ~ Key Vault).
 #
-#   - terraform/aws/environments/fargate-dev/  — ECS Fargate, LIVE path
-#   - terraform/aws/_reference-eks/             — EKS, PARKED (see its
-#     README for the ~$135/month baseline cost that moved it here —
-#     $73 EKS control plane + $32 NAT Gateway + $30 one t3.medium node,
-#     BEFORE autoscaling past 1 node, vs. Fargate's no-control-plane-fee
-#     pricing for the same 5 services)
+# What this costs to run, roughly, once applied: EKS control plane
+# ~$73/month (flat, no free tier) + one NAT Gateway ~$32/month + one
+# t3.medium node ~$30/month ≈ $135/month baseline BEFORE autoscaling
+# past 1 node. That's already well past the $50 budget default below
+# — raise monthly_budget_amount in terraform.tfvars before applying,
+# or destroy the eks/networking modules between demos the same way the
+# original comment here suggested doing for all of EKS.
 #
-# THIS is the ONLY environment that owns the ECR repositories, the
-# GitHub OIDC provider, and the VPC. All are account-wide or
-# environment-defining singletons; staging/prod do NOT re-declare
-# module.ecr — see their own main.tf for why. fargate-dev does not
-# re-declare module.networking or module.ecr either — it references
-# this environment's outputs.
+# THIS is also the ONLY environment that owns the ECR repositories,
+# the GitHub OIDC provider, the VPC, and the EKS cluster. All are
+# account-wide or environment-defining singletons; staging/prod do NOT
+# re-declare module.ecr or module.eks — see their own main.tf for why.
 # ============================================================
 
 locals {
@@ -30,21 +30,18 @@ locals {
     owner       = "homeease"
   }
 
-  resource_prefix = "homeease-${var.environment}"
+  cluster_name = "eks-homeease-${var.environment}"
 }
 
 # ============================================================
-# NETWORKING — shared VPC. fargate-dev deploys its tasks and ALB into
-# these same subnets (via terraform_remote_state); a second, separate
-# VPC per compute option would just mean double NAT Gateway cost for
-# no isolation benefit at this scale.
+# NETWORKING
 # ============================================================
 
 module "networking" {
   source = "../../modules/networking"
 
   environment  = var.environment
-  cluster_name = local.resource_prefix
+  cluster_name = local.cluster_name
 
   vpc_cidr             = var.vpc_cidr
   public_subnet_cidrs  = var.public_subnet_cidrs
@@ -54,36 +51,66 @@ module "networking" {
 }
 
 # ============================================================
-# SECRETS MANAGER — containers only, no values (see
-# modules/secrets/SECRETS.md). One prefix per service that actually
-# needs secrets — matches Key Vault's per-service secret scoping on
-# the Azure side, and mirrors exactly what a SecretProviderClass would
-# list per service in gitops_homeease.
+# EKS
 # ============================================================
 
-module "backend_secrets" {
-  source = "../../modules/secrets"
+module "eks" {
+  source = "../../modules/eks"
 
-  name_prefix  = "homeease/${var.environment}/backend"
-  secret_names = ["mongo-uri", "jwt-secret", "email-user", "email-pass"]
+  cluster_name       = local.cluster_name
+  kubernetes_version = var.kubernetes_version
+
+  private_subnet_ids = module.networking.private_subnet_ids
+  public_subnet_ids  = module.networking.public_subnet_ids
+
+  node_instance_types = var.node_instance_types
+  node_desired_size   = var.node_desired_size
+  node_min_size       = var.node_min_size
+  node_max_size       = var.node_max_size
 
   tags = local.common_tags
 }
 
-module "admin_backend_secrets" {
-  source = "../../modules/secrets"
-
-  name_prefix  = "homeease/${var.environment}/admin-backend"
-  secret_names = ["mongo-uri", "jwt-secret"]
-
-  tags = local.common_tags
-}
+# ============================================================
+# SECRETS MANAGER — payment-service's Razorpay credentials only. See
+# modules/secrets/SECRETS.md for how the values themselves get set
+# (never by Terraform).
+# ============================================================
 
 module "payment_secrets" {
   source = "../../modules/secrets"
 
   name_prefix  = "homeease/${var.environment}/payment-service"
   secret_names = var.payment_secret_names
+
+  tags = local.common_tags
+}
+
+# ============================================================
+# IRSA — payment-service's own IAM role, own blast radius. Mirrors
+# module.workload_identity_payment on the Azure side exactly, down to
+# the same TODO: this shares nothing with backend/admin-backend by
+# design (payment-service is the one place a mistake has a real
+# financial consequence — see gitops_homeease's
+# apps/payment-service/base/networkpolicy.yaml for the rest of that
+# reasoning).
+# ============================================================
+
+module "irsa_payment" {
+  source = "../../modules/irsa"
+
+  role_name = "homeease-${var.environment}-payment-service"
+
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+
+  # Matches the GitOps repo's namespace-per-environment design
+  # (homeease-dev / homeease-staging / homeease-prod) — see
+  # gitops_homeease/apps/payment-service/overlays/aws/dev/kustomization.yaml.
+  namespace            = var.kubernetes_namespace
+  service_account_name = "payment-service"
+
+  secret_arns = values(module.payment_secrets.secret_arns)
 
   tags = local.common_tags
 }
@@ -107,17 +134,11 @@ module "ecr" {
   # Convenient on a trial account. Set false once anything matters.
   force_delete = true
 
-  # No pull grant here on purpose. Fargate task pulls happen via a
-  # task EXECUTION role with the AWS-managed
-  # AmazonECSTaskExecutionRolePolicy attached (its ECR actions are
-  # already resource:"*" by AWS's own design — see
-  # modules/ci-oidc/main.tf's identical GetAuthorizationToken comment)
-  # — no per-repository policy needed the way EKS's node role required
-  # one. That role lives in environments/fargate-dev/main.tf. Keeping
-  # this grant out of this shared, compute-agnostic environment means
-  # _reference-eks (if ever re-applied) and fargate-dev never fight
-  # over the same policy.
-  pull_principal_arns = null
+  # The node role only — IRSA (module.irsa_payment) handles
+  # application identity for secrets, not image pulls. Pods never pull
+  # their own images; the kubelet does, using the node's role, before
+  # any pod (and therefore any ServiceAccount) exists.
+  pull_principal_arns = [module.eks.node_role_arn]
 
   tags = local.common_tags
 }

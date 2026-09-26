@@ -1,0 +1,148 @@
+name: Terraform Drift Detection (Azure dev)
+
+# ============================================================
+# A genuinely different concern from terraform.yml: that workflow
+# proves a PROPOSED change is safe before it's applied. This proves
+# infrastructure that was ALREADY applied still matches what Terraform
+# thinks exists — the two drift apart the moment anyone changes
+# something in the Azure Portal, runs an ad-hoc `az` command, or an
+# Azure-managed feature (AKS auto-upgrade, Key Vault soft-delete
+# purge, etc.) changes a value Terraform also tracks.
+#
+# Read-only, on purpose — this workflow's only IAM actions are
+# `terraform plan`'s own read calls. It never runs `apply` or
+# `destroy`. Detection and remediation are deliberately separate
+# responsibilities: a human decides whether drift is expected
+# (someone fixed something by hand under pressure — legitimate) or a
+# real problem (someone bypassed the pipeline — not), and applying
+# blind either overwrites a real manual fix or worse, masks the fact
+# someone went around the process at all.
+#
+# dev only, not matrixed like terraform.yml's plan job — staging/prod
+# have never been applied, so "drift" against them is meaningless
+# (everything would show as "to be created", which isn't drift, it's
+# just unapplied config). Extend to staging/prod's own workflow the
+# day either one is actually applied for real.
+# ============================================================
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 08:30 IST — free (plan makes read-only API calls, no cost)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+env:
+  TF_VERSION: "1.13.5"
+
+jobs:
+  drift-check:
+    name: Check dev for drift
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: terraform/azure/environments/dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # Real tfvars, not terraform.tfvars.example — comparing live
+      # infrastructure against placeholder values would report every
+      # difference from the example as "drift", which is noise, not
+      # signal. Every value here (location, node count, VM size, CIDR
+      # ranges, an Azure AD object ID) is environment-specific config,
+      # not a credential — real secrets (Mongo URI, JWT, Razorpay
+      # keys) are Key Vault-managed and were never Terraform variables
+      # in this design. Stored as a repo secret purely because it's
+      # environment-specific, not because it's sensitive.
+      - name: Write real tfvars
+        run: echo "${{ secrets.DEV_TFVARS_CONTENT }}" > terraform.tfvars
+
+      - name: Terraform Init
+        run: terraform init -input=false -reconfigure
+
+      - name: Terraform Plan (detect-only)
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -no-color -detailed-exitcode -out=tfplan > plan-output.txt 2>&1
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+          cat plan-output.txt
+
+      - name: Fail loudly on a real plan error
+        if: steps.plan.outputs.exitcode == '1'
+        run: |
+          echo "::error::terraform plan itself failed — see the Plan step above. This is not drift, it's a broken plan."
+          exit 1
+
+      # ────────────────────────────────────────────────────────
+      # exitcode 2 = drift. One open issue, kept up to date, not a
+      # new issue every night — a daily schedule that opened a fresh
+      # issue each run would bury the one that matters under
+      # duplicates within a week.
+      # ────────────────────────────────────────────────────────
+      - name: Open or update the drift issue
+        if: steps.plan.outputs.exitcode == '2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BODY_FILE=$(mktemp)
+          {
+            echo "Terraform detected infrastructure drift in \`terraform/azure/environments/dev\` — the live Azure resources no longer match this repo's configuration."
+            echo
+            echo "**Do not run \`terraform apply\` to \"fix\" this without reading the plan below first.** Drift can mean someone made a legitimate manual change under pressure (apply that back into the config instead of overwriting it) or that something bypassed the pipeline entirely (a real process problem, separate from the resource itself)."
+            echo
+            echo '<details><summary>terraform plan output</summary>'
+            echo
+            echo '```'
+            tail -c 60000 plan-output.txt
+            echo '```'
+            echo '</details>'
+            echo
+            echo "Run: [$(date -u +%Y-%m-%dT%H:%MZ)]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          } > "$BODY_FILE"
+
+          EXISTING=$(gh issue list --search "in:title \"Terraform drift: dev\" is:open" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+            echo "Updated existing drift issue #$EXISTING"
+          else
+            gh issue create \
+              --title "Terraform drift: dev" \
+              --label "terraform-drift" \
+              --body-file "$BODY_FILE"
+          fi
+
+      # No drift this run — close out any issue left open from a
+      # previous run instead of leaving it stale once whatever caused
+      # it is resolved.
+      - name: Close the drift issue if drift is gone
+        if: steps.plan.outputs.exitcode == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          EXISTING=$(gh issue list --search "in:title \"Terraform drift: dev\" is:open" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "No drift detected on this run — closing. See the [run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for the clean plan."
+            gh issue close "$EXISTING"
+            echo "Closed resolved drift issue #$EXISTING"
+          else
+            echo "No drift, no open issue — nothing to do."
+          fi

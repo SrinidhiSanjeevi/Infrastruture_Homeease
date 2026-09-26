@@ -34,3 +34,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "extra_policy_json" {
+  description = "Optional second IAM policy document (JSON, e.g. from data.aws_iam_policy_document), attached alongside the Budgets + ECRReadOnly baseline every environment gets. Null (default) attaches nothing extra."
+  type        = string
+  default     = null
+}

@@ -95,3 +95,19 @@ resource "aws_iam_role_policy" "this" {
   role   = aws_iam_role.this.id
   policy = data.aws_iam_policy_document.permissions.json
 }
+
+# ============================================================
+# EXTRA PERMISSIONS — for an environment that manages more than
+# budgets + registry read (e.g. fargate-dev's ECS/ALB/autoscaling
+# resources). A second policy document rather than a parameter that
+# reshapes the one above, so every environment's baseline
+# (Budgets + ECRReadOnly) stays identical and reviewable in one place.
+# ============================================================
+
+resource "aws_iam_role_policy" "extra" {
+  count = var.extra_policy_json != null ? 1 : 0
+
+  name   = "tf-apply-extra"
+  role   = aws_iam_role.this.id
+  policy = var.extra_policy_json
+}

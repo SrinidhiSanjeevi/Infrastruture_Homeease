@@ -44,26 +44,32 @@ output "repository_arns" {
 }
 
 # ============================================================
-# EKS / GitOps hand-off — these become the placeholders you fill in
-# across gitops_homeease/apps/*/overlays/aws/dev/ and
-# argocd/aws/bootstrap/.
+# Consumed by fargate-dev via `terraform_remote_state` (same state
+# backend, key "aws/dev.terraform.tfstate" — see fargate-dev/main.tf).
+# Not GitHub repository variables like the block above; these stay
+# inside Terraform, read stack-to-stack.
 # ============================================================
 
-output "cluster_name" {
-  value = module.eks.cluster_name
+output "vpc_id" {
+  value = module.networking.vpc_id
 }
 
-output "configure_kubectl" {
-  description = "Run this once to point kubectl at the new cluster."
-  value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
+output "public_subnet_ids" {
+  value = module.networking.public_subnet_ids
 }
 
-output "irsa_payment_role_arn" {
-  description = "Set as the eks.amazonaws.com/role-arn annotation in apps/payment-service/overlays/aws/dev/kustomization.yaml (REPLACE-WITH-IAM-ROLE-ARN)."
-  value       = module.irsa_payment.role_arn
+output "private_subnet_ids" {
+  value = module.networking.private_subnet_ids
+}
+
+output "backend_secret_arns" {
+  value = module.backend_secrets.secret_arns
+}
+
+output "admin_backend_secret_arns" {
+  value = module.admin_backend_secrets.secret_arns
 }
 
 output "payment_secret_arns" {
-  description = "Confirms the exact Secrets Manager names to use in apps/payment-service/overlays/aws/dev/secretproviderclass.yaml's objectName fields."
-  value       = module.payment_secrets.secret_arns
+  value = module.payment_secrets.secret_arns
 }
