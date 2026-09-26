@@ -1,0 +1,154 @@
+name: Terraform Apply (AWS Fargate dev)
+
+# ============================================================
+# The one exception to "apply is a separate, human-gated CD concern,
+# out of scope here by design" in terraform.yml/terraform-aws.yml's
+# own header comments — and it's still human-gated, just via a GitHub
+# Environment's required reviewers instead of a human running
+# `terraform apply` from their own machine. Scoped to exactly ONE
+# environment (fargate-dev), not extended to dev/staging/prod's own
+# workflows, so this stays a deliberate, reviewed exception rather
+# than a silent policy change for every other stack in this repo.
+#
+# Triggers on a push to image-tags.auto.tfvars — the file
+# app_Homeease's aws-ci.yml commits to after every image push+sign —
+# or on a direct change to the fargate-dev config itself.
+# ============================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/aws/environments/fargate-dev/**"
+      - "terraform/aws/modules/ecs-cluster/**"
+      - "terraform/aws/modules/ecs-service/**"
+      - "terraform/aws/modules/alb/**"
+      - "terraform/aws/modules/tf-apply-role/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-aws-fargate-apply
+  cancel-in-progress: false # never cancel an in-progress apply
+
+env:
+  TF_VERSION: "1.13.5"
+
+jobs:
+  # ============================================================
+  # Fails fast, before anything touches AWS, if a REPLACE_ME
+  # placeholder is still sitting in the tfvars file this workflow is
+  # about to apply. Same "dormant vs live" reasoning as
+  # gitops_homeease's check_prod_placeholders.py — the difference
+  # here is there's only ever one live target (fargate-dev has no
+  # dormant twin the way azure-prod does), so this checks the one
+  # file directly rather than needing to resolve which Applications
+  # are live first.
+  # ============================================================
+  check-placeholders:
+    name: Guard against REPLACE_ME reaching a live apply
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check image-tags.auto.tfvars is real
+        run: |
+          set -euo pipefail
+          FILE="terraform/aws/environments/fargate-dev/image-tags.auto.tfvars"
+          if grep -q "REPLACE_ME" "$FILE"; then
+            echo "::error file=$FILE::REPLACE_ME placeholder still present — refusing to apply against a nonexistent image tag. Run app_Homeease's aws-ci.yml at least once, or set a real tag by hand, first."
+            grep -n "REPLACE_ME" "$FILE"
+            exit 1
+          fi
+          echo "OK — no REPLACE_ME in $FILE"
+
+  plan:
+    name: Plan
+    needs: check-placeholders
+    runs-on: ubuntu-latest
+    environment: aws-fargate-dev
+    defaults:
+      run:
+        working-directory: terraform/aws/environments/fargate-dev
+    outputs:
+      exitcode: ${{ steps.plan.outputs.exitcode }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: homeease-fargate-apply-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init -input=false -reconfigure
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/aws/environments/fargate-dev/tfplan
+          retention-days: 1
+
+  # ============================================================
+  # Separate job, same Environment — a run that reaches this job has
+  # already had the plan reviewed against `environment:
+  # aws-fargate-dev`'s required reviewers (Settings -> Environments ->
+  # aws-fargate-dev -> required reviewers) before this job's OIDC
+  # token is even minted. Applying the EXACT plan artifact from the
+  # job above, not a fresh plan — what was approved is what runs.
+  # ============================================================
+  apply:
+    name: Apply
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: aws-fargate-dev
+    defaults:
+      run:
+        working-directory: terraform/aws/environments/fargate-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/aws/environments/fargate-dev
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: homeease-fargate-apply-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init -input=false -reconfigure
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Summary
+        run: |
+          {
+            echo "### Applied fargate-dev"
+            echo '```'
+            terraform output
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

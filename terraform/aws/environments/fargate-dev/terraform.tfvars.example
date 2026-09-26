@@ -1,0 +1,3 @@
+registry_state_bucket = "REPLACE-WITH-BOOTSTRAP-bucket_name-OUTPUT" # same value as environments/dev/backend.tf's bucket
+budget_contact_emails  = ["you@example.com"]
+allowed_origins        = "*" # tighten to the real ALB DNS name (or a domain) after first apply

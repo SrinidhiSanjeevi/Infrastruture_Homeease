@@ -6,11 +6,14 @@ stacks live here side by side:
 - **`terraform/azure/`** — the ONLY infrastructure actually provisioned
   today. Backs `aks-homeease-dev`, the one live cluster `gitops_homeease`
   deploys to.
-- **`terraform/aws/`** — fully written (ECR, EKS, IRSA, CI OIDC), but no
-  EKS cluster has ever been applied from it. Mirrors the Azure stack
-  cloud-natively, the same way `app_Homeease`'s two CI pipelines and
-  `gitops_homeease`'s `argocd/_aws-disabled/` mirror each other — built
-  for parity, not (yet) live.
+- **`terraform/aws/`** — split by compute path. `environments/dev/`
+  (ECR + CI OIDC + VPC + Secrets Manager) is compute-agnostic and
+  written to be applied. On top of it, **`environments/fargate-dev/`**
+  is the live compute path — 5 services on ECS Fargate behind one ALB,
+  written but not yet applied (see its own README for why and the cost
+  estimate). `_reference-eks/` holds the Kubernetes-on-AWS path that
+  preceded Fargate — parked, not applied, kept for reference (its own
+  README explains the ~$135/month reason it moved here).
 
 Companion repos: `app_Homeease` (application code + CI, pushes images to
 ACR/ECR) and `gitops_homeease` (Helm charts + Argo CD, consumes this
@@ -92,6 +95,14 @@ more consistent next step. Atlantis is a legitimate alternative if the
 PR-comment UX specifically matters for the team, not because the
 current setup is missing something it needs.
 
+**`terraform-aws-fargate-apply.yml` is that first concrete instance** —
+a real plan-then-apply pipeline, scoped to exactly one environment
+(`fargate-dev`), gated behind a GitHub Environment's required
+reviewers, applying the exact plan artifact that was reviewed rather
+than a fresh one. `terraform.yml`/`terraform-aws.yml` themselves are
+untouched — this is a deliberate, separate exception, not a silent
+policy change for `dev`/`staging`/`prod`.
+
 ## Directory structure
 
 ```
@@ -109,20 +120,54 @@ terraform/
       prod/            defined, not applied — no prod cluster exists
 
   aws/
-    bootstrap/, modules/ (ecr, eks, irsa, networking, secrets, ci-oidc,
-      tf-apply-role), environments/{dev,staging,prod}/
-    Four independent configurations, not one parameterised by
-    var.environment like Azure — dev alone owns the account-wide ECR
-    repos and GitHub OIDC provider (see environments/dev/main.tf).
+    bootstrap/         Stage 0, same idea as azure/bootstrap — S3 bucket + lock
+    modules/            ecr, networking, secrets, ci-oidc, tf-apply-role (compute-
+                       agnostic, shared) + ecs-cluster, ecs-service, alb (Fargate)
+    environments/
+      dev/              LIVE — ECR, VPC, GitHub OIDC, Secrets Manager containers.
+                       No compute. Four independent configs (not one parameterised
+                       by var.environment like Azure) — dev alone owns the
+                       account-wide singletons (see environments/dev/main.tf).
+      fargate-dev/      LIVE compute path — 5 services on ECS Fargate + ALB, built
+                       on dev's outputs via terraform_remote_state. Written, not
+                       yet applied — see its own README.
+      staging/, prod/   defined, not applied — compute-agnostic scaffolding only
+    _reference-eks/     PARKED — the Kubernetes-on-AWS path Fargate replaced.
+                       modules/{eks,irsa} + a snapshot of what environments/dev/
+                       looked like with them wired in. See its own README.
 
   persistent/
     azure-storage/     DNS / storage that must outlive any environment teardown
     aws-route53/        same idea, AWS side
 
 .github/workflows/
-  terraform.yml         Azure: checkov -> fmt/validate/plan, matrixed dev/staging/prod
-  terraform-aws.yml     AWS: same shape, GitHub OIDC -> IAM role per environment
+  terraform.yml                    Azure: checkov -> fmt/validate/plan, matrixed dev/staging/prod
+  terraform-aws.yml                AWS: same shape, GitHub OIDC -> IAM role per environment
+  terraform-aws-fargate-apply.yml  AWS fargate-dev ONLY: plan -> environment approval -> apply
+                                   — the one exception to "apply is manual", see above
+  terraform-drift.yml               Azure dev ONLY, scheduled: read-only terraform plan
+                                   -detailed-exitcode against live infra. Opens/updates/closes
+                                   one GitHub issue on drift — never applies or destroys.
 ```
+
+## Drift detection (Azure dev)
+
+`terraform.yml` proves a *proposed* change is safe. `terraform-drift.yml`
+proves infrastructure that was already applied still matches what
+Terraform thinks exists — the two drift the moment anyone changes
+something by hand in the Portal, runs an ad-hoc `az` command, or an
+Azure-managed feature changes a tracked value. Runs daily, read-only
+(`terraform plan` only — never `apply`/`destroy`, deliberately: a human
+decides whether drift is a legitimate manual fix to reconcile back into
+config, or a process bypass worth investigating). Needs the
+`DEV_TFVARS_CONTENT` repo secret set to the contents of the real
+`terraform.tfvars` — stored as a secret purely because it's
+environment-specific, not because it's sensitive; every value in it
+(region, node count, VM size, CIDRs, an Azure AD object ID) is
+non-credential config, and real secrets here are Key Vault-managed, never
+Terraform variables. dev only — staging/prod have never been applied, so
+"drift" against them is meaningless (everything would show as "to be
+created", not drift).
 
 ## Hand-off to GitOps
 
