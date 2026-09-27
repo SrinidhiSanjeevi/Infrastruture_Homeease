@@ -111,7 +111,7 @@ terraform/
     bootstrap/        Stage 0, run once: Storage Account + Blob container for
                        remote state (backend "local" the first time, never again)
     modules/           resource-group, networking, acr, aks, keyvault,
-                       workload-identity, secrets, ci-identity, sonarqube-vm
+                       workload-identity, secrets, ci-identity
     environments/
       dev/             LIVE — backs aks-homeease-dev. Own backend.tf (remote
                        state key), own ci.tf (least-privilege CI identity),
