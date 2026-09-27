@@ -33,13 +33,27 @@ above for why nothing should).
 
 | Key Vault secret name | Consumed by | Env var it becomes |
 |---|---|---|
-| `mongo-uri` | backend, admin-backend | `MONGO_URI` |
+| `booking-mongo-uri` | backend | `MONGO_URI` |
+| `admin-mongo-uri` | admin-backend | `MONGO_URI` |
+| `payment-mongo-uri` | payment-service | `MONGO_URI` |
+| `notification-mongo-uri` | notification-service | `MONGO_URI` |
 | `jwt-secret` | backend, admin-backend | `JWT_SECRET` |
-| `email-user` | backend | `EMAIL_USER` |
-| `email-pass` | backend | `EMAIL_PASS` |
+| `internal-service-token` | backend, admin-backend, payment-service, notification-service | `INTERNAL_SERVICE_TOKEN` |
+| `email-user` | backend, notification-service | `EMAIL_USER` |
+| `email-pass` | backend, notification-service | `EMAIL_PASS` |
+| `email-from` | notification-service | `EMAIL_FROM` |
 | `razorpay-key-id` | payment-service | `RAZORPAY_KEY_ID` |
 | `razorpay-key-secret` | payment-service | `RAZORPAY_KEY_SECRET` |
 | `razorpay-webhook-secret` | payment-service | `RAZORPAY_WEBHOOK_SECRET` |
+
+`mongo-uri` (singular, no service prefix) is a **stale pre-split name still
+present in the vault** — created before backend/admin-backend/payment-service/
+notification-service each got their own database (see
+`app_Homeease/scripts/local-db-split/README.md`). Its current value points at
+`docauth.ede9v4k.mongodb.net/dockerAuthDB`, which is not a HomeEase database
+at all. Don't reuse it for any of the four names above — it needs replacing
+with the four real per-service connection strings by hand (see below), and
+can be deleted once nothing references it.
 
 ## Rotation
 

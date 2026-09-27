@@ -213,6 +213,42 @@ module "workload_identity_payment" {
   tags = local.common_tags
 }
 
+module "workload_identity_notification" {
+  source = "../../modules/workload-identity"
+
+  identity_name = "id-homeease-notification-${var.environment}"
+
+  federated_credential_name = "fic-homeease-notification-${var.environment}"
+
+  resource_group_name = module.resource_group.name
+
+  location = var.location
+
+  aks_oidc_issuer_url = module.aks.oidc_issuer_url
+
+  namespace            = var.kubernetes_namespace
+  service_account_name = "notification-service"
+  additional_service_accounts = [
+    # Phase 1 staging (homeease-staging namespace, SAME AKS cluster).
+    # notification-service in staging federates against this SAME
+    # identity it uses in homeease-dev — staging intentionally shares
+    # dev's database/secrets/identity for now, same trade-off already
+    # documented on workload_identity_payment above.
+    {
+      namespace            = "homeease-staging"
+      service_account_name = "notification-service"
+    }
+  ]
+
+  # Same shared-vault trade-off as workload_identity_payment above —
+  # not a new decision, just applying the existing one to a 4th
+  # identity.
+  key_vault_id    = module.keyvault.id
+  admin_object_id = var.admin_object_id
+
+  tags = local.common_tags
+}
+
 # ============================================================
 # COMMON TAGS
 # ============================================================

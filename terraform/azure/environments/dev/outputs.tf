@@ -82,3 +82,13 @@ output "workload_identity_payment_principal_id" {
   description = "Principal ID of the payment-service workload identity."
   value       = module.workload_identity_payment.principal_id
 }
+
+output "workload_identity_notification_client_id" {
+  description = "Client ID for notification-service's dedicated workload identity. Set as workloadIdentity.clientId in gitops_homeease/charts/notification-service/values-azure-dev.yaml."
+  value       = module.workload_identity_notification.client_id
+}
+
+output "workload_identity_notification_principal_id" {
+  description = "Principal ID of the notification-service workload identity."
+  value       = module.workload_identity_notification.principal_id
+}
