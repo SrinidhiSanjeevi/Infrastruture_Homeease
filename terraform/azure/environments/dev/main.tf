@@ -153,6 +153,20 @@ module "workload_identity_app" {
     {
       namespace            = var.kubernetes_namespace
       service_account_name = "admin-backend"
+    },
+    # Phase 1 staging (homeease-staging namespace, SAME AKS cluster —
+    # no new cluster, no new identity). backend and admin-backend in
+    # staging federate against this SAME identity, same as they already
+    # do for homeease-dev above — staging intentionally shares dev's
+    # databases/secrets/identity for now; full isolation is a future
+    # improvement once cost allows a second Key Vault/identity set.
+    {
+      namespace            = "homeease-staging"
+      service_account_name = "backend"
+    },
+    {
+      namespace            = "homeease-staging"
+      service_account_name = "admin-backend"
     }
   ]
 
@@ -177,6 +191,17 @@ module "workload_identity_payment" {
 
   namespace            = var.kubernetes_namespace
   service_account_name = "payment-service"
+  additional_service_accounts = [
+    # Phase 1 staging (homeease-staging namespace, SAME AKS cluster).
+    # payment-service in staging federates against this SAME identity
+    # it already uses in homeease-dev — staging intentionally shares
+    # dev's database/secrets/identity for now; full isolation is a
+    # future improvement once cost allows a second Key Vault/identity.
+    {
+      namespace            = "homeease-staging"
+      service_account_name = "payment-service"
+    }
+  ]
 
   # TODO (future hardening, not done here): a SEPARATE Key Vault
   # scoped to only payment-service's secrets is what actually
