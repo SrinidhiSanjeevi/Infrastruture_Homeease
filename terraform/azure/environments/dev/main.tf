@@ -189,35 +189,6 @@ module "workload_identity_payment" {
 }
 
 # ============================================================
-# SONARQUBE — self-hosted CI code-quality analysis, reachable by
-# Azure DevOps hosted agents. See modules/sonarqube-vm/main.tf for
-# why this is a VM and not AKS-hosted, and SONARQUBE.md (repo root)
-# for the persistence/backup/restore story.
-# ============================================================
-
-module "sonarqube" {
-  source = "../../modules/sonarqube-vm"
-
-  environment         = var.environment
-  location            = var.location
-  resource_group_name = module.resource_group.name
-  vnet_name           = module.networking.vnet_name
-  tools_subnet_prefix = var.sonarqube_subnet_prefix
-
-  vm_size           = var.sonarqube_vm_size
-  data_disk_size_gb = var.sonarqube_data_disk_size_gb
-
-  admin_username        = var.sonarqube_admin_username
-  admin_ssh_public_key  = var.sonarqube_admin_ssh_public_key
-  admin_ssh_source_cidr = var.sonarqube_admin_ssh_source_cidr
-
-  dns_label             = var.sonarqube_dns_label
-  backup_retention_days = var.sonarqube_backup_retention_days
-
-  tags = local.common_tags
-}
-
-# ============================================================
 # COMMON TAGS
 # ============================================================
 
