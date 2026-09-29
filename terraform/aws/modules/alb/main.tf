@@ -24,7 +24,7 @@ terraform {
 
 resource "aws_security_group" "alb" {
   name_prefix = "homeease-${var.environment}-alb-"
-  description = "HomeEase ALB (${var.environment}) — public HTTP only"
+  description = "HomeEase ALB (${var.environment}) - public HTTP only"
   vpc_id      = var.vpc_id
 
   ingress {

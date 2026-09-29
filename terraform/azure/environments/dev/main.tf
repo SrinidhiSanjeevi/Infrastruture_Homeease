@@ -98,41 +98,7 @@ module "keyvault" {
 }
 
 
-# ============================================================
-# AKS WORKLOAD IDENTITY
-#
-# Two identities, not one, because Key Vault RBAC is granted at the
-# VAULT level — Azure has no built-in per-secret role scoping. That
-# means a shared identity is fine for services that are meant to see
-# the same secrets, but doesn't buy any real isolation on its own.
-#
-#   workload_identity_app     -> ServiceAccounts "backend" AND
-#                                 "admin-backend". Both already read
-#                                 mongo-uri/jwt-secret/email-* (see
-#                                 modules/keyvault/SECRETS.md) — one
-#                                 identity, one blast radius, matches
-#                                 reality instead of pretending they're
-#                                 isolated when they're not.
-#
-#   workload_identity_payment -> ServiceAccount "payment-service"
-#                                 ONLY. Same Key Vault for now (see
-#                                 the trade-off note below), but its
-#                                 OWN identity means: (a) Key Vault
-#                                 diagnostic logs show a distinct
-#                                 principal for payment's reads, not
-#                                 blended into backend's traffic, and
-#                                 (b) the day a payment-only Key Vault
-#                                 is added, only THIS block's
-#                                 key_vault_id changes — backend/
-#                                 admin-backend are untouched.
-#
-# Namespace: matches the GitOps repo's namespace-per-environment
-# design (homeease-dev / homeease-staging / homeease-prod), NOT a
-# single shared "homeease" namespace — that was the bug (Terraform
-# and the GitOps repo targeting different namespaces, so no pod could
-# actually authenticate). var.kubernetes_namespace must be set to
-# "homeease-${var.environment}" in tfvars for this to line up.
-# ============================================================
+# AKS workload identities — one per blast radius (app, payment, notification)
 
 module "workload_identity_app" {
   source = "../../modules/workload-identity"
@@ -154,12 +120,7 @@ module "workload_identity_app" {
       namespace            = var.kubernetes_namespace
       service_account_name = "admin-backend"
     },
-    # Phase 1 staging (homeease-staging namespace, SAME AKS cluster —
-    # no new cluster, no new identity). backend and admin-backend in
-    # staging federate against this SAME identity, same as they already
-    # do for homeease-dev above — staging intentionally shares dev's
-    # databases/secrets/identity for now; full isolation is a future
-    # improvement once cost allows a second Key Vault/identity set.
+    # Phase 1: staging shares this identity (same AKS cluster) for now
     {
       namespace            = "homeease-staging"
       service_account_name = "backend"
@@ -192,21 +153,14 @@ module "workload_identity_payment" {
   namespace            = var.kubernetes_namespace
   service_account_name = "payment-service"
   additional_service_accounts = [
-    # Phase 1 staging (homeease-staging namespace, SAME AKS cluster).
-    # payment-service in staging federates against this SAME identity
-    # it already uses in homeease-dev — staging intentionally shares
-    # dev's database/secrets/identity for now; full isolation is a
-    # future improvement once cost allows a second Key Vault/identity.
+    # Phase 1: staging shares this identity (same AKS cluster) for now
     {
       namespace            = "homeease-staging"
       service_account_name = "payment-service"
     }
   ]
 
-  # TODO (future hardening, not done here): a SEPARATE Key Vault
-  # scoped to only payment-service's secrets is what actually
-  # achieves isolation, since RBAC is vault-wide. Sharing the vault
-  # for now is a documented, deliberate trade-off — not an oversight.
+  # TODO: give payment-service its own Key Vault for real isolation
   key_vault_id    = module.keyvault.id
   admin_object_id = var.admin_object_id
 
@@ -229,20 +183,14 @@ module "workload_identity_notification" {
   namespace            = var.kubernetes_namespace
   service_account_name = "notification-service"
   additional_service_accounts = [
-    # Phase 1 staging (homeease-staging namespace, SAME AKS cluster).
-    # notification-service in staging federates against this SAME
-    # identity it uses in homeease-dev — staging intentionally shares
-    # dev's database/secrets/identity for now, same trade-off already
-    # documented on workload_identity_payment above.
+    # Phase 1: staging shares this identity (same AKS cluster) for now
     {
       namespace            = "homeease-staging"
       service_account_name = "notification-service"
     }
   ]
 
-  # Same shared-vault trade-off as workload_identity_payment above —
-  # not a new decision, just applying the existing one to a 4th
-  # identity.
+  # Same shared-vault trade-off as workload_identity_payment above
   key_vault_id    = module.keyvault.id
   admin_object_id = var.admin_object_id
 

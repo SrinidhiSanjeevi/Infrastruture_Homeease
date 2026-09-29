@@ -113,8 +113,14 @@ variable "on_demand_base" {
 # reachable, matching its NetworkPolicy on the Kubernetes side.
 # ============================================================
 
+variable "attach_alb" {
+  description = "True for frontend/admin-frontend only — the two services with a public Ingress in gitops_homeease. A literal bool, not derived from alb_security_group_id itself, because that value is unknown at plan time (the ALB is created in the same apply) and for_each/count can't branch on an unknown value."
+  type        = bool
+  default     = false
+}
+
 variable "alb_security_group_id" {
-  description = "Set for frontend/admin-frontend only — the two services with a public Ingress in gitops_homeease. Null for internal-only services."
+  description = "Set together with attach_alb = true. Null for internal-only services."
   type        = string
   default     = null
 }
@@ -126,9 +132,9 @@ variable "alb_target_group_arn" {
 }
 
 variable "allowed_source_security_group_ids" {
-  description = "Security groups of the services allowed to call this one directly — e.g. payment-service sets this to [backend's SG id] only, mirroring its NetworkPolicy's podSelector.matchLabels restriction to backend alone."
-  type        = set(string)
-  default     = []
+  description = "Security groups of the services allowed to call this one directly, keyed by peer service name (not SG id) — the id is only known after apply, and for_each needs its keys known at plan time. E.g. payment-service sets this to { backend = <backend's SG id> } only, mirroring its NetworkPolicy's podSelector.matchLabels restriction to backend alone."
+  type        = map(string)
+  default     = {}
 }
 
 variable "tags" {

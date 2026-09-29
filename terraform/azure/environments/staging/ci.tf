@@ -1,15 +1,4 @@
-# ============================================================
-# CI IDENTITY — GitHub Actions -> Terraform apply, staging only
-#
-# Unlike dev, this environment does NOT get an Azure DevOps /
-# ACR-push identity: CI builds and scans exactly one image digest
-# per commit, from dev's pipeline (see ANALYSIS.md §3). Staging
-# never rebuilds — it receives the digest CD promotes into it.
-# What staging DOES need is its own least-privilege identity for the
-# infra repo's GitHub Actions workflow to plan/apply *this*
-# environment, scoped to *this* resource group only — not dev's,
-# not prod's.
-# ============================================================
+# CI identity for GitHub Actions -> Terraform apply, staging only (no ADO/ACR-push identity here)
 
 module "ci_identity" {
   source = "../../modules/ci-identity"
@@ -27,15 +16,12 @@ module "ci_identity" {
   # Matches `environment: ${{ matrix.env }}` in .github/workflows/terraform.yml.
   github_environment = var.environment
 
-  # Same trade-off as dev: one identity, both main (apply) and PR
-  # (plan) trust it. See dev/ci.tf for the stricter two-identity
-  # alternative if this is ever pushed toward real production use.
+  # Same trade-off as dev: one identity trusted for both apply and plan
   enable_github_pull_request = false
 
   tfstate_storage_account_id = var.tfstate_storage_account_id
 
-  # Scoped to THIS resource group, not the subscription and not
-  # dev's or prod's resource group.
+  # Scoped to this resource group only
   enable_subscription_role_assignment = true
   subscription_role_scope             = module.resource_group.id
   subscription_role_definition        = "Contributor"

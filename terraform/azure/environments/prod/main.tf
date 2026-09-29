@@ -98,41 +98,7 @@ module "keyvault" {
 }
 
 
-# ============================================================
-# AKS WORKLOAD IDENTITY
-#
-# Two identities, not one, because Key Vault RBAC is granted at the
-# VAULT level — Azure has no built-in per-secret role scoping. That
-# means a shared identity is fine for services that are meant to see
-# the same secrets, but doesn't buy any real isolation on its own.
-#
-#   workload_identity_app     -> ServiceAccounts "backend" AND
-#                                 "admin-backend". Both already read
-#                                 mongo-uri/jwt-secret/email-* (see
-#                                 modules/keyvault/SECRETS.md) — one
-#                                 identity, one blast radius, matches
-#                                 reality instead of pretending they're
-#                                 isolated when they're not.
-#
-#   workload_identity_payment -> ServiceAccount "payment-service"
-#                                 ONLY. Same Key Vault for now (see
-#                                 the trade-off note below), but its
-#                                 OWN identity means: (a) Key Vault
-#                                 diagnostic logs show a distinct
-#                                 principal for payment's reads, not
-#                                 blended into backend's traffic, and
-#                                 (b) the day a payment-only Key Vault
-#                                 is added, only THIS block's
-#                                 key_vault_id changes — backend/
-#                                 admin-backend are untouched.
-#
-# Namespace: matches the GitOps repo's namespace-per-environment
-# design (homeease-dev / homeease-staging / homeease-prod), NOT a
-# single shared "homeease" namespace — that was the bug (Terraform
-# and the GitOps repo targeting different namespaces, so no pod could
-# actually authenticate). var.kubernetes_namespace must be set to
-# "homeease-${var.environment}" in tfvars for this to line up.
-# ============================================================
+# AKS workload identities — one per blast radius (app, payment)
 
 module "workload_identity_app" {
   source = "../../modules/workload-identity"
