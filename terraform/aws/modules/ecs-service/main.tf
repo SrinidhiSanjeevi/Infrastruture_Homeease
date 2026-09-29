@@ -33,7 +33,7 @@ terraform {
 
 resource "aws_security_group" "this" {
   name_prefix = "homeease-${var.environment}-${var.name}-"
-  description = "HomeEase ${var.name} (${var.environment}) — ingress scoped to its real callers only"
+  description = "HomeEase ${var.name} (${var.environment}) - ingress scoped to its real callers only"
   vpc_id      = var.vpc_id
 
   egress {
@@ -51,7 +51,14 @@ resource "aws_security_group" "this" {
 }
 
 resource "aws_security_group_rule" "from_alb" {
-  count = var.alb_security_group_id != null ? 1 : 0
+  # A count keyed on "var.alb_security_group_id != null" looks
+  # equivalent but isn't: for frontend/admin-frontend that value is
+  # module.alb.security_group_id, unknown until apply (the ALB is
+  # created in this same apply) — Terraform can't resolve a count from
+  # an unknown value even though it can never actually be null for
+  # those two callers. attach_alb is a literal bool in the caller's
+  # config instead, so it's always known at plan time.
+  count = var.attach_alb ? 1 : 0
 
   type                     = "ingress"
   security_group_id        = aws_security_group.this.id
@@ -59,7 +66,7 @@ resource "aws_security_group_rule" "from_alb" {
   from_port                = var.container_port
   to_port                  = var.container_port
   protocol                 = "tcp"
-  description              = "ALB -> ${var.name}"
+  description              = "ALB to ${var.name}"
 }
 
 resource "aws_security_group_rule" "from_peers" {
@@ -71,7 +78,9 @@ resource "aws_security_group_rule" "from_peers" {
   from_port                = var.container_port
   to_port                  = var.container_port
   protocol                 = "tcp"
-  description              = "peer service -> ${var.name}"
+  # ">" isn't in EC2's allowed description character set
+  # (^[0-9A-Za-z_ .:/()#,@\[\]+=&;{}!$*-]*$), so "->" is spelled out.
+  description = "${each.key} to ${var.name}"
 }
 
 # ============================================================

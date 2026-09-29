@@ -189,6 +189,7 @@ module "frontend" {
 
   image                 = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/frontend:${var.image_tags.frontend}"
   container_port        = 8080
+  attach_alb            = true
   alb_security_group_id = module.alb.security_group_id
   alb_target_group_arn  = module.alb.frontend_target_group_arn
 
@@ -209,6 +210,7 @@ module "admin_frontend" {
 
   image                 = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/admin-frontend:${var.image_tags.admin_frontend}"
   container_port        = 8080
+  attach_alb            = true
   alb_security_group_id = module.alb.security_group_id
   alb_target_group_arn  = module.alb.admin_frontend_target_group_arn
 
@@ -230,10 +232,10 @@ module "backend" {
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/backend:${var.image_tags.backend}"
   container_port = 5000
 
-  allowed_source_security_group_ids = [
-    module.frontend.security_group_id,
-    module.admin_frontend.security_group_id,
-  ]
+  allowed_source_security_group_ids = {
+    frontend       = module.frontend.security_group_id
+    admin_frontend = module.admin_frontend.security_group_id
+  }
 
   environment_variables = {
     NODE_ENV                  = "production"
@@ -268,7 +270,7 @@ module "admin_backend" {
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/admin-backend:${var.image_tags.admin_backend}"
   container_port = 5001
 
-  allowed_source_security_group_ids = [module.admin_frontend.security_group_id]
+  allowed_source_security_group_ids = { admin_frontend = module.admin_frontend.security_group_id }
 
   environment_variables = {
     NODE_ENV        = "production"
@@ -302,7 +304,7 @@ module "payment_service" {
 
   # Tightest ingress in the stack, on purpose — see the block comment
   # above "SERVICES".
-  allowed_source_security_group_ids = [module.backend.security_group_id]
+  allowed_source_security_group_ids = { backend = module.backend.security_group_id }
 
   environment_variables = {
     NODE_ENV             = "production"

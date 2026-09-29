@@ -1,11 +1,4 @@
-# ============================================================
-# HomeEase User Assigned Managed Identity
-# ============================================================
-#
-# This identity is used by HomeEase workloads running in AKS.
-# No client secret or Azure credential is stored in Kubernetes.
-#
-# ============================================================
+# User-assigned managed identity for HomeEase workloads running in AKS
 
 resource "azurerm_user_assigned_identity" "homeease" {
   name                = var.identity_name
@@ -15,21 +8,7 @@ resource "azurerm_user_assigned_identity" "homeease" {
   tags = var.tags
 }
 
-# ============================================================
-# AKS Workload Identity Federation
-# ============================================================
-#
-# Allows the Kubernetes service account to exchange its OIDC
-# token for an Azure AD token.
-#
-# No Azure client secret is required inside the application.
-#
-# The federated credential is tightly restricted to:
-#
-#   namespace:        var.namespace
-#   service account:  var.service_account_name
-#
-# ============================================================
+# Federated credential letting the Kubernetes service account exchange its OIDC token for an Azure AD token
 
 resource "azurerm_federated_identity_credential" "homeease" {
   name = var.federated_credential_name
@@ -45,18 +24,7 @@ resource "azurerm_federated_identity_credential" "homeease" {
   ]
 }
 
-# ============================================================
-# ADDITIONAL FEDERATED SERVICE ACCOUNTS — same identity, same
-# Key Vault access, a different Kubernetes ServiceAccount.
-#
-# For services that legitimately share the same secrets and the
-# same blast radius (backend + admin-backend both read mongo-uri /
-# jwt-secret / email-*), one identity federated for two ServiceAccount
-# names is simpler than two identities that would end up with
-# identical RBAC anyway. A service that needs an actually SEPARATE
-# blast radius (payment-service) gets its OWN module instance
-# instead of an entry here — see environments/dev/main.tf.
-# ============================================================
+# Additional federated ServiceAccounts sharing this same identity
 
 resource "azurerm_federated_identity_credential" "additional" {
   for_each = {
@@ -64,7 +32,12 @@ resource "azurerm_federated_identity_credential" "additional" {
     "${sa.namespace}/${sa.service_account_name}" => sa
   }
 
-  name = "${var.federated_credential_name}-${each.value.service_account_name}"
+  # Namespace-qualified only when it isn't the identity's home namespace,
+  # so existing credentials keep their names (Azure name is ForceNew).
+  # Without the qualifier, two namespaces sharing a service_account_name
+  # (e.g. "admin-backend" in both the home namespace and a Phase-1-shared
+  # one) would collide on the same Azure resource name.
+  name = each.value.namespace == var.namespace ? "${var.federated_credential_name}-${each.value.service_account_name}" : "${var.federated_credential_name}-${each.value.service_account_name}-${each.value.namespace}"
 
   user_assigned_identity_id = azurerm_user_assigned_identity.homeease.id
 
@@ -77,20 +50,7 @@ resource "azurerm_federated_identity_credential" "additional" {
   ]
 }
 
-# ============================================================
-# Key Vault Access
-# ============================================================
-#
-# Grants ONLY the workload identity permission to read secrets.
-#
-# The identity does NOT receive:
-#   - Key Vault Administrator
-#   - Key Vault Secrets Officer
-#   - permission to create/update/delete secrets
-#
-# This follows least-privilege access.
-#
-# ============================================================
+# Key Vault access: least-privilege, read-only (Key Vault Secrets User)
 
 resource "azurerm_role_assignment" "keyvault_secrets_user" {
   scope                = var.key_vault_id

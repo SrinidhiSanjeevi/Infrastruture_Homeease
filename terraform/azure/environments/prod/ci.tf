@@ -1,16 +1,4 @@
-# ============================================================
-# CI IDENTITY — GitHub Actions -> Terraform apply, prod only
-#
-# Same reasoning as staging/ci.tf: no ADO/ACR-push identity here,
-# because CI never rebuilds an image for prod — it promotes the
-# digest already built, scanned and signed for dev. This identity
-# exists only so the infra repo's GitHub Actions workflow can
-# plan/apply THIS resource group.
-#
-# Because this is prod, prefer requiring a GitHub Environment with
-# manual reviewers ("environment: prod" in the workflow) before this
-# identity's token is ever minted, rather than trusting main alone.
-# ============================================================
+# CI identity for GitHub Actions -> Terraform apply, prod only (no ADO/ACR-push identity here)
 
 module "ci_identity" {
   source = "../../modules/ci-identity"

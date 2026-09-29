@@ -1,32 +1,4 @@
-# ============================================================
-# CI IDENTITY — Azure DevOps and GitHub Actions, secretless
-#
-# Creates one Entra ID application whose credentials are federated
-# trust relationships, not secrets. Nothing this module produces can
-# be copied out of a log or a leaked variable group, because nothing
-# it produces is a credential.
-#
-# Two trust anchors are registered against the same application:
-#
-#   Azure DevOps   issuer  https://vstoken.dev.azure.com/<org-id>
-#                  subject sc://<org>/<project>/<service-connection>
-#
-#   GitHub Actions issuer  https://token.actions.githubusercontent.com
-#                  subject repo:<owner>/<repo>:ref:refs/heads/main
-#
-# NOTE ON THE ADO SERVICE CONNECTION
-# Create it as "Workload Identity federation (MANUAL)", not automatic.
-# Automatic makes Azure DevOps create the app registration for you,
-# outside Terraform — your CI identity then exists only as click-ops
-# and cannot be reviewed, versioned or destroyed with the rest of the
-# stack. Manual gives you an issuer + subject to paste here, so the
-# identity is code like everything else.
-#
-# Chicken-and-egg: the service connection needs the client ID this
-# module outputs, and this module needs the connection's name (which
-# you choose up front, so there is no real deadlock — pick the name,
-# apply, then create the connection with the output).
-# ============================================================
+# CI identity (Azure DevOps + GitHub Actions) using federated credentials instead of secrets.
 
 terraform {
   required_version = ">= 1.7.0"
@@ -68,14 +40,7 @@ resource "azuread_service_principal" "ci" {
   tags = ["homeease", "ci", var.environment]
 }
 
-# ============================================================
-# FEDERATED CREDENTIAL — AZURE DEVOPS
-#
-# The subject is what makes this safe. `sc://org/project/connection`
-# means only that one service connection, in that one project, can
-# exchange a token for this identity. Another project in the same
-# organisation cannot.
-# ============================================================
+# Federated credential for the Azure DevOps service connection
 
 resource "azuread_application_federated_identity_credential" "azure_devops" {
   count = var.enable_azure_devops ? 1 : 0
@@ -92,20 +57,7 @@ resource "azuread_application_federated_identity_credential" "azure_devops" {
   subject   = "sc://${var.ado_organization_name}/${var.ado_project_name}/${var.ado_service_connection_name}"
 }
 
-# ============================================================
-# FEDERATED CREDENTIALS — GITHUB ACTIONS
-#
-# Two separate subjects, deliberately:
-#
-#   main    → can push to ACR (see role assignment below)
-#   PRs     → a SEPARATE identity in practice; here we register the
-#             environment subject so you can later scope prod-only
-#             permissions to a GitHub Environment with reviewers.
-#
-# What NOT to write: subject = "repo:owner/repo:*". That wildcard
-# lets any branch — including one pushed by a fork PR — assume the
-# identity. It is the single most common OIDC misconfiguration.
-# ============================================================
+# Federated credentials for GitHub Actions OIDC (main branch, environment, and PR subjects)
 
 resource "azuread_application_federated_identity_credential" "github_main" {
   count = var.enable_github ? 1 : 0
@@ -147,20 +99,7 @@ resource "azuread_application_federated_identity_credential" "github_pr" {
   subject   = "repo:${var.github_owner}/${var.github_repository}:pull_request"
 }
 
-# ============================================================
-# ROLE ASSIGNMENTS
-#
-# AcrPush only. Not Contributor, not Owner, not AcrPull (push
-# implies the ability to pull what you pushed; the cluster's kubelet
-# identity holds AcrPull separately).
-#
-# Scope note: per-repository push isolation inside a single registry
-# needs either scope maps + tokens (Premium SKU only) or ABAC
-# conditions on the role assignment (preview, limited Terraform
-# support). On Basic SKU, registry-wide AcrPush for a CI identity is
-# the accepted trade-off. Document it rather than pretending it isn't
-# there.
-# ============================================================
+# Role assignment: AcrPush only — pull is granted separately to the cluster's kubelet identity
 
 resource "azurerm_role_assignment" "acr_push" {
   scope                = var.acr_id
@@ -170,15 +109,7 @@ resource "azurerm_role_assignment" "acr_push" {
   description = "Allows the CI pipeline to push images. Pull for workloads is granted separately to the kubelet identity."
 }
 
-# ============================================================
-# OPTIONAL — TERRAFORM STATE ACCESS
-#
-# Only for the identity used by the INFRA repo's workflow, not the
-# app CI. Two levels so PR plans cannot mutate state:
-#
-#   Storage Blob Data Contributor → apply  (main)
-#   Storage Blob Data Reader      → plan   (PRs)
-# ============================================================
+# Optional Terraform state access for the infra repo's CI identity
 
 resource "azurerm_role_assignment" "tfstate_contributor" {
   count = var.tfstate_storage_account_id != null ? 1 : 0

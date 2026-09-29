@@ -1,20 +1,4 @@
-# ============================================================
-# CI IDENTITY WIRING — add to terraform/azure/environments/dev/
-#
-# Two-step apply, because the ADO service connection needs the client
-# ID this produces:
-#
-#   1. Pick the service connection NAME (do not create it yet).
-#      Put it in ado_service_connection_name below.
-#   2. terraform apply
-#   3. Read `terraform output ci_client_id` and `ci_tenant_id`.
-#   4. In ADO: Project settings -> Service connections -> New ->
-#      Azure Resource Manager -> Workload Identity federation (MANUAL).
-#      Paste the client ID, tenant ID and subscription ID. Name it
-#      EXACTLY what you put in step 1 — the name is part of the
-#      subject claim, and a mismatch produces AADSTS700213 with a
-#      message that does not tell you the name is the problem.
-# ============================================================
+# CI identity wiring for dev (Azure DevOps + GitHub Actions)
 
 module "ci_identity" {
   source = "../../modules/ci-identity"
@@ -24,14 +8,7 @@ module "ci_identity" {
 
   acr_id = module.acr.id
 
-  # ── Azure DevOps (app repo -> ACR) ──────────────────────
-  # Temporarily OFF: ado_organization_id in terraform.tfvars is still a
-  # placeholder ("REPLACE-AFTER-ADO-CHECK") — that org requires sign-in,
-  # so the real GUID has to come from a browser session or `az devops`,
-  # not an anonymous curl. Leaving this "true" with a placeholder GUID
-  # would NOT fail apply; it would silently create a federated-identity
-  # trust for a nonexistent issuer that Azure DevOps could never
-  # actually use. Flip back to true once ado_organization_id is real.
+  # Azure DevOps (app repo -> ACR): temporarily off, ado_organization_id is still a placeholder
   enable_azure_devops = false
 
   # GUID, not the org name. Get it from:
@@ -48,11 +25,7 @@ module "ci_identity" {
   # Matches `environment: ${{ matrix.env }}` in .github/workflows/terraform.yml.
   github_environment = var.environment
 
-  # Note: this identity CAN write state. For a stricter setup,
-  # instantiate the module twice — one identity with Storage Blob Data
-  # Contributor trusted for refs/heads/main, one with Storage Blob Data
-  # Reader trusted for pull_request. Then a PR plan physically cannot
-  # mutate state, rather than merely being expected not to.
+  # Note: this identity can write state (stricter two-identity split not used here)
   enable_github_pull_request = false
 
   tfstate_storage_account_id = var.tfstate_storage_account_id
@@ -77,12 +50,7 @@ output "ci_ado_subject" {
   value       = module.ci_identity.ado_subject
 }
 
-# ============================================================
-# COST GUARDRAIL
-#
-# On a 30-day, $200 credit this is not optional. Create it before the
-# expensive resources, not after the email arrives.
-# ============================================================
+# Cost guardrail budget
 
 resource "azurerm_consumption_budget_resource_group" "homeease" {
   name              = "budget-homeease-${var.environment}"

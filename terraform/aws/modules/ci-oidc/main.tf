@@ -108,7 +108,7 @@ data "aws_iam_policy_document" "push_assume" {
 
 resource "aws_iam_role" "push" {
   name                 = var.push_role_name
-  description          = "HomeEase CI — pushes container images to ECR. Assumed via GitHub OIDC; has no long-lived credentials."
+  description          = "HomeEase CI - pushes container images to ECR. Assumed via GitHub OIDC; has no long-lived credentials."
   assume_role_policy   = data.aws_iam_policy_document.push_assume.json
   max_session_duration = 3600
 
@@ -191,7 +191,7 @@ resource "aws_iam_role" "read" {
   count = var.create_read_role ? 1 : 0
 
   name                 = "${var.push_role_name}-read"
-  description          = "HomeEase CI — read-only, assumed by pull request workflows. Cannot write to any registry."
+  description          = "HomeEase CI - read-only, assumed by pull request workflows. Cannot write to any registry."
   assume_role_policy   = data.aws_iam_policy_document.read_assume[0].json
   max_session_duration = 3600
 
