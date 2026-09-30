@@ -91,3 +91,64 @@ resource "azurerm_role_assignment" "tfstate_blob_contributor" {
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = data.azurerm_client_config.current.object_id
 }
+
+# ============================================================
+# Azure DevOps pipeline identity (service connection azure-homeease-dev)
+#
+# Lives HERE, not in an environment, so it survives a dev destroy/re-apply:
+# the pipeline needs these roles to rebuild dev in the first place.
+# ============================================================
+
+# Read/write Terraform state (backend uses use_azuread_auth = true).
+resource "azurerm_role_assignment" "pipeline_tfstate" {
+  scope                = azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = var.pipeline_principal_object_id
+  principal_type       = "ServicePrincipal"
+}
+
+# The stack creates role assignments (AcrPull, AcrPush, Key Vault roles).
+# Role Based Access Control Administrator, restricted by an ABAC condition so
+# the pipeline can assign ONLY those roles and can never hand out Owner or
+# User Access Administrator. Subscription scope because the resource groups it
+# works in are created and destroyed by the pipeline itself.
+locals {
+  pipeline_delegable_roles = join(", ", [
+    "7f951dda-4ed3-4680-a7ca-43fe172d538d", # AcrPull
+    "8311e382-0749-4cb8-b61a-304f252e45ec", # AcrPush
+    "4633458b-17de-408a-b874-0445c86b69e6", # Key Vault Secrets User
+    "b86a8fe4-44ce-4948-aee5-eccb2c155cd7", # Key Vault Secrets Officer
+    "ba92f5b4-2d11-453d-a403-e96b0029c9fe", # Storage Blob Data Contributor
+  ])
+}
+
+resource "azurerm_role_assignment" "pipeline_rbac_admin" {
+  scope                = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  role_definition_name = "Role Based Access Control Administrator"
+  principal_id         = var.pipeline_principal_object_id
+  principal_type       = "ServicePrincipal"
+
+  description       = "HomeEase pipeline: may only create/delete the role assignments listed in the condition."
+  condition_version = "2.0"
+  condition         = <<-EOT
+    (
+     (
+      !(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})
+     )
+     OR
+     (
+      @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {${local.pipeline_delegable_roles}}
+     )
+    )
+    AND
+    (
+     (
+      !(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})
+     )
+     OR
+     (
+      @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {${local.pipeline_delegable_roles}}
+     )
+    )
+  EOT
+}

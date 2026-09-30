@@ -37,3 +37,8 @@ variable "tags" {
     managed_by = "terraform-bootstrap"
   }
 }
+
+variable "pipeline_principal_object_id" {
+  description = "Object ID of the Azure DevOps service connection's service principal (azure-homeease-dev). Entra ID > Enterprise applications > Object ID."
+  type        = string
+}
