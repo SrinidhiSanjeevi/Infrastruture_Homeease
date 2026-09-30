@@ -68,10 +68,26 @@ locals {
   # Instead: pin refs explicitly, and use GitHub Environment subjects
   # (`environment:prod`) for anything privileged, because Environments
   # can require human approval before the token is minted at all.
+  # Two patterns per entry: GitHub's classic "repo:owner/repo:..." sub
+  # claim, and the immutable-ID form it now also issues —
+  # "repo:owner@<owner-id>/repo@<repo-id>:..." — added so a stale
+  # sub claim can't be replayed after a rename/transfer. The "@*"
+  # requires a literal "@" right after the exact owner/repo name
+  # (GitHub logins can never contain "@"), so this can't be widened
+  # into a prefix match against some other, similarly-named owner.
   push_subjects = concat(
-    [for b in var.allowed_branches : "repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/${b}"],
-    [for e in var.allowed_environments : "repo:${var.github_owner}/${var.github_repository}:environment:${e}"],
-    var.allow_tags ? ["repo:${var.github_owner}/${var.github_repository}:ref:refs/tags/*"] : []
+    flatten([for b in var.allowed_branches : [
+      "repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/${b}",
+      "repo:${var.github_owner}@*/${var.github_repository}@*:ref:refs/heads/${b}",
+    ]]),
+    flatten([for e in var.allowed_environments : [
+      "repo:${var.github_owner}/${var.github_repository}:environment:${e}",
+      "repo:${var.github_owner}@*/${var.github_repository}@*:environment:${e}",
+    ]]),
+    var.allow_tags ? [
+      "repo:${var.github_owner}/${var.github_repository}:ref:refs/tags/*",
+      "repo:${var.github_owner}@*/${var.github_repository}@*:ref:refs/tags/*",
+    ] : []
   )
 }
 
@@ -179,10 +195,15 @@ data "aws_iam_policy_document" "read_assume" {
       values   = ["sts.amazonaws.com"]
     }
 
+    # StringLike, not StringEquals — same immutable-ID sub-claim
+    # reasoning as push_subjects above.
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/${var.github_repository}:pull_request"]
+      values = [
+        "repo:${var.github_owner}/${var.github_repository}:pull_request",
+        "repo:${var.github_owner}@*/${var.github_repository}@*:pull_request",
+      ]
     }
   }
 }
