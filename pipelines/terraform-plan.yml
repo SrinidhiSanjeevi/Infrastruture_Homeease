@@ -2,13 +2,13 @@
 parameters:
   - name: env
     type: string
-  # dev plans with the real values (Library > Secure files > dev.tfvars).
-  # staging/prod are plan-only, so the committed example values are enough.
   # staging/prod are not deployed, so their own identities do not exist yet.
   # Their plan-only stages reuse the dev connection (it can read tfstate).
   - name: serviceConnection
     type: string
     default: azure-homeease-dev
+  # dev plans with the real values (Library > Secure files > dev.tfvars).
+  # staging/prod are plan-only, so the committed example values are enough.
   - name: secureVarFile
     type: string
     default: ""
@@ -26,29 +26,24 @@ jobs:
             inputs:
               secureFile: ${{ parameters.secureVarFile }}
 
-      - task: AzureCLI@2
-        displayName: terraform init + plan
-        env:
-          TFVARS_PATH: $(tfvars.secureFilePath)
-        inputs:
-          azureSubscription: ${{ parameters.serviceConnection }}
-          scriptType: bash
-          scriptLocation: inlineScript
-          workingDirectory: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }}
-          inlineScript: |
-            set -euxo pipefail
-            terraform version
-            ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-            export ARM_SUBSCRIPTION_ID
-            if [ -n "${{ parameters.secureVarFile }}" ]; then
-              VARFILE="$TFVARS_PATH"
-            else
-              VARFILE="terraform.tfvars.example"
-            fi
-            ls -l "$VARFILE"
-            terraform init -input=false -reconfigure
-            terraform plan -input=false -lock-timeout=10m -var-file="$VARFILE" -out=tfplan
-            terraform show -no-color tfplan > plan.txt
+          - task: AzureCLI@2
+            displayName: terraform init + plan (${{ parameters.env }})
+            inputs:
+              azureSubscription: ${{ parameters.serviceConnection }}
+              scriptType: bash
+              scriptLocation: scriptPath
+              scriptPath: $(Build.SourcesDirectory)/pipelines/scripts/terraform-plan.sh
+              arguments: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }} $(tfvars.secureFilePath)
+
+      - ${{ if eq(parameters.secureVarFile, '') }}:
+          - task: AzureCLI@2
+            displayName: terraform init + plan (${{ parameters.env }})
+            inputs:
+              azureSubscription: ${{ parameters.serviceConnection }}
+              scriptType: bash
+              scriptLocation: scriptPath
+              scriptPath: $(Build.SourcesDirectory)/pipelines/scripts/terraform-plan.sh
+              arguments: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }} $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }}/terraform.tfvars.example
 
       - task: PublishPipelineArtifact@1
         displayName: Publish plan
