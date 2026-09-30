@@ -1,0 +1,77 @@
+# PLAN-ONLY values used by the pipeline: format-valid placeholders so the provider accepts them.
+# Nothing is applied with this file. Real values would go in a secure file.
+environment = "prod"
+
+project_name = "homeease"
+
+location = "Central India"
+
+# ============================================================
+# AKS
+# ============================================================
+
+aks_node_count = 2
+
+aks_vm_size = "Standard_D2s_v5"
+
+# Free, not Standard. Standard's API-server SLA (~$73/mo) is not
+# something a capstone/trial-credit project can act on. See
+# ANALYSIS.md §2/§8. Revisit once this is a real production system
+# with an SLA to uphold.
+aks_sku_tier = "Free"
+
+# ============================================================
+# ACR
+#
+# Basic, not Premium. Saves ~$45/mo. Per-repository push isolation
+# (the main reason to pay for Premium) needs scope maps/tokens or
+# ABAC — both noted as future work in ANALYSIS.md §8.
+# ============================================================
+
+acr_sku = "Basic"
+
+# Still public in current architecture.
+# Later change to false + Private Endpoint.
+public_network_access_enabled = true
+
+# ============================================================
+# NETWORK
+# ============================================================
+
+vnet_address_space = [
+  "10.30.0.0/16"
+]
+
+aks_subnet_prefix = [
+  "10.30.0.0/22"
+]
+
+private_endpoint_subnet_prefix = [
+  "10.30.4.0/24"
+]
+
+keyvault_sku = "standard"
+
+keyvault_public_network_access_enabled = true
+
+kubernetes_namespace = "homeease-prod"
+
+service_account_name = "backend"
+
+admin_object_id = "00000000-0000-0000-0000-000000000000"
+
+# ============================================================
+# CI IDENTITY (ci.tf) — GitHub Actions -> Terraform apply only.
+# No Azure DevOps / ACR push identity here: CI never builds images
+# for prod, it promotes the digest CI already built for dev.
+# ============================================================
+
+tfstate_storage_account_id = "/subscriptions/b13ef9df-59b3-4529-a978-0dfe85765c7e/resourceGroups/tfstate-rg/providers/Microsoft.Storage/storageAccounts/tfstatehomeeaseayhiue"
+
+# ============================================================
+# COST GUARDRAIL
+# ============================================================
+
+monthly_budget_amount = 75
+budget_start_date     = "2026-10-01T00:00:00Z"
+budget_contact_emails = ["you@example.com"]

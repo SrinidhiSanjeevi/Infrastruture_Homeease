@@ -43,7 +43,7 @@ jobs:
               scriptType: bash
               scriptLocation: scriptPath
               scriptPath: $(Build.SourcesDirectory)/pipelines/scripts/terraform-plan.sh
-              arguments: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }} $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }}/terraform.tfvars.example
+              arguments: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }} $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }}/plan-only.tfvars.example
 
       - task: PublishPipelineArtifact@1
         displayName: Publish plan
