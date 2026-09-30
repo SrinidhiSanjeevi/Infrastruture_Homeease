@@ -1,0 +1,52 @@
+# Plan one environment and publish the plan file for a later apply.
+parameters:
+  - name: env
+    type: string
+  # dev plans with the real values (Library > Secure files > dev.tfvars).
+  # staging/prod are plan-only, so the committed example values are enough.
+  # staging/prod are not deployed, so their own identities do not exist yet.
+  # Their plan-only stages reuse the dev connection (it can read tfstate).
+  - name: serviceConnection
+    type: string
+    default: azure-homeease-dev
+  - name: secureVarFile
+    type: string
+    default: ""
+
+jobs:
+  - job: plan_${{ parameters.env }}
+    displayName: Plan (${{ parameters.env }})
+    steps:
+      - template: terraform-setup.yml
+
+      - ${{ if ne(parameters.secureVarFile, '') }}:
+          - task: DownloadSecureFile@1
+            name: tfvars
+            displayName: Download ${{ parameters.secureVarFile }}
+            inputs:
+              secureFile: ${{ parameters.secureVarFile }}
+
+      - task: AzureCLI@2
+        displayName: terraform init + plan
+        inputs:
+          azureSubscription: ${{ parameters.serviceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }}
+          inlineScript: |
+            set -euo pipefail
+            export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+            if [ -n "${{ parameters.secureVarFile }}" ]; then
+              VARFILE="$(tfvars.secureFilePath)"
+            else
+              VARFILE="terraform.tfvars.example"
+            fi
+            terraform init -input=false -reconfigure
+            terraform plan -input=false -lock-timeout=10m -var-file="$VARFILE" -out=tfplan
+            terraform show -no-color tfplan > plan.txt
+
+      - task: PublishPipelineArtifact@1
+        displayName: Publish plan
+        inputs:
+          targetPath: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }}
+          artifact: plan-${{ parameters.env }}

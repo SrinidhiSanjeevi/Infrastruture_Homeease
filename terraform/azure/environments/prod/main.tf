@@ -12,6 +12,20 @@ module "resource_group" {
 }
 
 # ============================================================
+# MONITORING (audit logs for ACR / Key Vault / AKS)
+# ============================================================
+
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  name                = "log-homeease-${var.environment}"
+  resource_group_name = module.resource_group.name
+  location            = var.location
+
+  tags = local.common_tags
+}
+
+# ============================================================
 # NETWORKING
 # ============================================================
 
@@ -44,6 +58,10 @@ module "acr" {
 
   public_network_access_enabled = var.public_network_access_enabled
 
+  enable_diagnostics         = true
+  log_analytics_workspace_id = module.monitoring.id
+  enable_delete_lock         = true
+
   tags = local.common_tags
 }
 
@@ -74,6 +92,10 @@ module "aks" {
   service_cidr   = var.service_cidr
   dns_service_ip = var.dns_service_ip
 
+  enable_diagnostics         = true
+  log_analytics_workspace_id = module.monitoring.id
+  enable_delete_lock         = true
+
   tags = local.common_tags
 }
 
@@ -93,6 +115,10 @@ module "keyvault" {
   sku_name = var.keyvault_sku
 
   public_network_access_enabled = var.keyvault_public_network_access_enabled
+
+  enable_diagnostics         = true
+  log_analytics_workspace_id = module.monitoring.id
+  enable_delete_lock         = true
 
   tags = local.common_tags
 }
@@ -148,8 +174,7 @@ module "workload_identity_payment" {
   # scoped to only payment-service's secrets is what actually
   # achieves isolation, since RBAC is vault-wide. Sharing the vault
   # for now is a documented, deliberate trade-off — not an oversight.
-  key_vault_id    = module.keyvault.id
-  admin_object_id = var.admin_object_id
+  key_vault_id = module.keyvault.id
 
   tags = local.common_tags
 }

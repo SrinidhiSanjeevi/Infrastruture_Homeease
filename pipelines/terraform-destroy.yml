@@ -1,0 +1,43 @@
+# Manual destroy for dev only. Run it from the Pipelines UI; it asks for
+# approval on the same `homeease-dev` Environment.
+trigger: none
+pr: none
+
+parameters:
+  - name: confirm
+    displayName: Type "destroy-dev" to confirm
+    type: string
+    default: ""
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TF_VERSION: "1.13.5"
+
+stages:
+  - stage: Destroy_Dev
+    condition: eq('${{ parameters.confirm }}', 'destroy-dev')
+    jobs:
+      - deployment: destroy_dev
+        environment: homeease-dev
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: terraform-setup.yml
+                - task: DownloadSecureFile@1
+                  name: tfvars
+                  inputs:
+                    secureFile: dev.tfvars
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: azure-homeease-dev
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    workingDirectory: $(Build.SourcesDirectory)/terraform/azure/environments/dev
+                    inlineScript: |
+                      set -euo pipefail
+                      export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                      terraform init -input=false -reconfigure
+                      terraform destroy -input=false -lock-timeout=10m -auto-approve -var-file="$(tfvars.secureFilePath)"

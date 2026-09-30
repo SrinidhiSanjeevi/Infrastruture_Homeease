@@ -44,3 +44,32 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_diagnostics" {
+  description = "Send audit logs to Log Analytics. A plain bool (not a null check) because the workspace ID is unknown at plan time."
+  type        = bool
+  default     = false
+}
+
+variable "log_analytics_workspace_id" {
+  description = "Log Analytics workspace that receives diagnostics."
+  type        = string
+  default     = null
+}
+
+variable "enable_delete_lock" {
+  description = "Apply a CanNotDelete management lock."
+  type        = bool
+  default     = false
+}
+
+variable "network_acls" {
+  description = "Key Vault firewall. null = no firewall block (unchanged behaviour)."
+  type = object({
+    default_action             = string
+    bypass                     = optional(string, "AzureServices")
+    ip_rules                   = optional(list(string), [])
+    virtual_network_subnet_ids = optional(list(string), [])
+  })
+  default = null
+}

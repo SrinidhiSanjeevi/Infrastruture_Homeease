@@ -86,3 +86,45 @@ variable "secret_rotation_interval" {
   type        = string
   default     = "2m"
 }
+
+variable "enable_diagnostics" {
+  description = "Send audit logs to Log Analytics. A plain bool (not a null check) because the workspace ID is unknown at plan time."
+  type        = bool
+  default     = false
+}
+
+variable "log_analytics_workspace_id" {
+  description = "Log Analytics workspace that receives diagnostics."
+  type        = string
+  default     = null
+}
+
+variable "enable_delete_lock" {
+  description = "Apply a CanNotDelete management lock."
+  type        = bool
+  default     = false
+}
+
+variable "automatic_upgrade_channel" {
+  description = "AKS auto-upgrade channel: patch, stable, rapid, node-image or none."
+  type        = string
+  default     = "patch"
+}
+
+variable "local_account_disabled" {
+  description = "Disable the static admin kubeconfig. Only set true together with admin_group_object_ids."
+  type        = bool
+  default     = false
+}
+
+variable "admin_group_object_ids" {
+  description = "Entra ID groups with cluster-admin. Non-empty enables Entra ID + Azure RBAC."
+  type        = list(string)
+  default     = []
+}
+
+variable "api_server_authorized_ip_ranges" {
+  description = "CIDRs allowed to reach the Kubernetes API. Empty = open (unchanged behaviour)."
+  type        = list(string)
+  default     = []
+}

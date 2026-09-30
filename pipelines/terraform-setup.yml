@@ -1,0 +1,9 @@
+# Pin the Terraform version so every run (and every environment) behaves the same.
+steps:
+  - checkout: self
+  - bash: |
+      set -euo pipefail
+      curl -fsSLo tf.zip "https://releases.hashicorp.com/terraform/$(TF_VERSION)/terraform_$(TF_VERSION)_linux_amd64.zip"
+      sudo unzip -oq tf.zip -d /usr/local/bin
+      terraform version
+    displayName: Install Terraform $(TF_VERSION)

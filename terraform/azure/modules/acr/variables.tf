@@ -44,3 +44,27 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_diagnostics" {
+  description = "Send audit logs to Log Analytics. A plain bool (not a null check) because the workspace ID is unknown at plan time."
+  type        = bool
+  default     = false
+}
+
+variable "log_analytics_workspace_id" {
+  description = "Log Analytics workspace that receives diagnostics."
+  type        = string
+  default     = null
+}
+
+variable "enable_delete_lock" {
+  description = "Apply a CanNotDelete management lock."
+  type        = bool
+  default     = false
+}
+
+variable "retention_policy_in_days" {
+  description = "Days before untagged manifests are purged (Premium SKU only)."
+  type        = number
+  default     = 30
+}

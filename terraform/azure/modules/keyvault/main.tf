@@ -20,5 +20,40 @@ resource "azurerm_key_vault" "this" {
   # Private Endpoint can be added later.
   public_network_access_enabled = var.public_network_access_enabled
 
+  # Firewall. null keeps today's behaviour; set it to default_action = "Deny"
+  # (with bypass "AzureServices" and your IP/subnet allow-lists) to close
+  # the public endpoint without needing a Private Endpoint.
+  dynamic "network_acls" {
+    for_each = var.network_acls == null ? [] : [var.network_acls]
+    content {
+      default_action             = network_acls.value.default_action
+      bypass                     = network_acls.value.bypass
+      ip_rules                   = network_acls.value.ip_rules
+      virtual_network_subnet_ids = network_acls.value.virtual_network_subnet_ids
+    }
+  }
+
   tags = var.tags
+}
+
+# Audit trail: every secret read/write/delete is logged.
+resource "azurerm_monitor_diagnostic_setting" "this" {
+  count = var.enable_diagnostics ? 1 : 0
+
+  name                       = "diag-${var.name}"
+  target_resource_id         = azurerm_key_vault.this.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "AuditEvent"
+  }
+}
+
+resource "azurerm_management_lock" "this" {
+  count = var.enable_delete_lock ? 1 : 0
+
+  name       = "lock-${var.name}"
+  scope      = azurerm_key_vault.this.id
+  lock_level = "CanNotDelete"
+  notes      = "Holds application secrets. Remove the lock deliberately before deleting."
 }

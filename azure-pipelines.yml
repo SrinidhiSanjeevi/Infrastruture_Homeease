@@ -1,0 +1,135 @@
+# ============================================================
+# HomeEase Azure Terraform pipeline (Azure DevOps)
+#
+#   PR to main : fmt -> validate -> checkov -> plan dev/staging/prod
+#                (nothing is applied; the plans are the review material)
+#   main merge : same, then APPLY DEV ONLY, after a manual approval
+#                on the `homeease-dev` Environment.
+#                staging and prod are plan-only by design.
+#
+# Why two people merging at once cannot lose code:
+#   * Apply only ever runs on main, AFTER the merge, so it always
+#     contains every merged change, never a half-merged branch.
+#   * `lockBehavior: sequential` + the Exclusive Lock check on the
+#     environment queue the runs: run 2 waits for run 1, then plans
+#     against the new main and the new state.
+#   * The apply uses the saved plan file. If state changed after the
+#     plan was made, Terraform refuses it ("saved plan is stale")
+#     instead of overwriting. Re-run and it re-plans.
+#   * azurerm state uses a blob lease, so two writers cannot touch
+#     the same state at the same instant.
+# ============================================================
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - terraform/azure/**
+      - azure-pipelines.yml
+      - pipelines/**
+
+pr:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - terraform/azure/**
+      - azure-pipelines.yml
+      - pipelines/**
+
+lockBehavior: sequential
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TF_VERSION: "1.13.5"
+  TF_IN_AUTOMATION: "true"
+
+stages:
+  - stage: Validate
+    displayName: Format, validate, scan
+    jobs:
+      - job: validate
+        steps:
+          - template: pipelines/terraform-setup.yml
+
+          - bash: terraform fmt -check -recursive -diff
+            displayName: terraform fmt
+            workingDirectory: terraform/azure
+
+          - bash: |
+              set -euo pipefail
+              for env in dev staging prod; do
+                echo "=== $env"
+                (cd terraform/azure/environments/$env \
+                  && terraform init -backend=false -input=false >/dev/null \
+                  && terraform validate)
+              done
+            displayName: terraform validate (all environments)
+
+          - bash: |
+              pip install --quiet checkov
+              # Accepted, documented trade-offs: public ACR / Key Vault endpoints.
+              checkov -d terraform/azure --framework terraform \
+                --skip-check CKV_AZURE_137,CKV_AZURE_109 --compact
+            displayName: checkov
+
+  - stage: Plan_Dev
+    displayName: Plan dev
+    dependsOn: Validate
+    jobs:
+      - template: pipelines/terraform-plan.yml
+        parameters:
+          env: dev
+          secureVarFile: dev.tfvars
+
+  - stage: Plan_Staging
+    displayName: Plan staging (plan only)
+    dependsOn: Validate
+    jobs:
+      - template: pipelines/terraform-plan.yml
+        parameters:
+          env: staging
+
+  - stage: Plan_Prod
+    displayName: Plan prod (plan only)
+    dependsOn: Validate
+    jobs:
+      - template: pipelines/terraform-plan.yml
+        parameters:
+          env: prod
+
+  # Only after a merge to main, never for a PR. Environment
+  # `homeease-dev` holds the Approval + Exclusive Lock checks.
+  - stage: Apply_Dev
+    displayName: Apply dev (approval required)
+    dependsOn: Plan_Dev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: apply_dev
+        displayName: Apply dev
+        environment: homeease-dev
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: pipelines/terraform-setup.yml
+                # Same commit as the plan: guarantees the .tf files match the plan.
+                - download: current
+                  artifact: plan-dev
+
+                - task: AzureCLI@2
+                  displayName: terraform apply (saved plan)
+                  inputs:
+                    azureSubscription: azure-homeease-dev
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    workingDirectory: $(Pipeline.Workspace)/plan-dev
+                    inlineScript: |
+                      set -euo pipefail
+                      export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                      chmod -R +x .terraform/providers || true
+                      terraform init -input=false -reconfigure
+                      terraform apply -input=false -lock-timeout=10m tfplan
