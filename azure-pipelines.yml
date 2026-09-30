@@ -71,9 +71,8 @@ stages:
 
           - bash: |
               pip install --quiet checkov
-              # Accepted, documented trade-offs: public ACR / Key Vault endpoints.
-              checkov -d terraform/azure --framework terraform \
-                --skip-check CKV_AZURE_137,CKV_AZURE_109 --compact
+              # Policy + documented accepted risks live in .checkov.yaml
+              checkov --config-file .checkov.yaml
             displayName: checkov
 
   - stage: Plan_Dev
