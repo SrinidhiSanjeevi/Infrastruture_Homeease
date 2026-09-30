@@ -8,7 +8,12 @@ module "ci_identity" {
 
   acr_id = module.acr.id
 
-  enable_azure_devops = false
+  # Flip to true after setting the real ado_organization_id (pipeline needs it).
+  enable_azure_devops         = false
+  ado_organization_id         = var.ado_organization_id
+  ado_organization_name       = var.ado_organization_name
+  ado_project_name            = var.ado_project_name
+  ado_service_connection_name = "azure-homeease-ci-${var.environment}"
 
   enable_github     = true
   github_owner      = "SrinidhiSanjeevi"

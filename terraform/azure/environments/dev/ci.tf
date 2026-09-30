@@ -9,14 +9,16 @@ module "ci_identity" {
   acr_id = module.acr.id
 
   # Azure DevOps (app repo -> ACR): temporarily off, ado_organization_id is still a placeholder
+  # Flip to true after setting the real ado_organization_id (pipeline needs it).
   enable_azure_devops = false
 
   # GUID, not the org name. Get it from:
   #   https://dev.azure.com/<org>/_apis/connectionData  -> instanceId
-  ado_organization_id         = var.ado_organization_id
-  ado_organization_name       = var.ado_organization_name
-  ado_project_name            = var.ado_project_name
-  ado_service_connection_name = "azure-homeease-ci"
+  ado_organization_id   = var.ado_organization_id
+  ado_organization_name = var.ado_organization_name
+  ado_project_name      = var.ado_project_name
+  # One service connection per environment: ADO names are unique per project.
+  ado_service_connection_name = "azure-homeease-ci-${var.environment}"
 
   # ── GitHub Actions (infra repo -> Terraform) ────────────
   enable_github     = true

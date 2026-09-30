@@ -59,7 +59,11 @@ resource "azurerm_role_assignment" "keyvault_secrets_user" {
   principal_id = azurerm_user_assigned_identity.homeease.principal_id
 }
 
+# Human admin assignment: create it from ONE identity module per vault only.
+# Azure rejects a second identical (principal, role, scope) assignment.
 resource "azurerm_role_assignment" "admin_secrets_officer" {
+  count = var.admin_object_id != null ? 1 : 0
+
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = var.admin_object_id

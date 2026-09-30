@@ -61,7 +61,8 @@ variable "tags" {
 
 
 variable "admin_object_id" {
-  description = "Object ID of the admin/user who needs read-write access to Key Vault secrets (for manual secret management)."
+  description = "Object ID of the admin who gets read-write Key Vault access. null = skip (set on ONE module per vault)."
   type        = string
+  default     = null
 }
 
