@@ -61,7 +61,7 @@ stages:
 
           - bash: |
               set -euo pipefail
-              for env in dev staging prod; do
+              for env in dev dev-identity staging prod; do
                 echo "=== $env"
                 (cd terraform/azure/environments/$env \
                   && terraform init -backend=false -input=false >/dev/null \
