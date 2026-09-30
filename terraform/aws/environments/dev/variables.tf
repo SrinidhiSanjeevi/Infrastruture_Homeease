@@ -72,5 +72,5 @@ variable "private_subnet_cidrs" {
 variable "payment_secret_names" {
   description = "Secrets Manager secret name suffixes created under homeease/<environment>/payment-service/."
   type        = list(string)
-  default     = ["razorpay-key-id", "razorpay-key-secret", "razorpay-webhook-secret"]
+  default     = ["mongo-uri", "razorpay-key-id", "razorpay-key-secret", "razorpay-webhook-secret"]
 }

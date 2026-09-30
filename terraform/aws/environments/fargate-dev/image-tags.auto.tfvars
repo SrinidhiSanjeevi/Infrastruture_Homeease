@@ -8,9 +8,9 @@
 # ============================================================
 
 image_tags = {
-  backend         = "REPLACE_ME"
-  admin_backend   = "REPLACE_ME"
-  frontend        = "REPLACE_ME"
-  admin_frontend  = "REPLACE_ME"
-  payment_service = "REPLACE_ME"
+  backend         = "89617ff8897b"
+  admin_backend   = "89617ff8897b"
+  frontend        = "89617ff8897b"
+  admin_frontend  = "89617ff8897b"
+  payment_service = "89617ff8897b"
 }

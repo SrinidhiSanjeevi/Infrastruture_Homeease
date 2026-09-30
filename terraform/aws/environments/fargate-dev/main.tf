@@ -313,6 +313,7 @@ module "payment_service" {
   }
 
   secrets = {
+    MONGO_URI               = data.terraform_remote_state.registry.outputs.payment_secret_arns["mongo-uri"]
     RAZORPAY_KEY_ID         = data.terraform_remote_state.registry.outputs.payment_secret_arns["razorpay-key-id"]
     RAZORPAY_KEY_SECRET     = data.terraform_remote_state.registry.outputs.payment_secret_arns["razorpay-key-secret"]
     RAZORPAY_WEBHOOK_SECRET = data.terraform_remote_state.registry.outputs.payment_secret_arns["razorpay-webhook-secret"]
