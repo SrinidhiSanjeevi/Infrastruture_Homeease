@@ -23,4 +23,18 @@ terraform init -input=false -reconfigure
 terraform plan -input=false -lock="${PLAN_LOCK:-true}" -lock-timeout=10m -var-file="$VARFILE" -out=tfplan
 # Show in the log only (sensitive values stay masked). No plan.txt file is
 # written, so nothing readable ends up in the downloadable artifact.
-terraform show -no-color tfplan
+terraform show -no-color tfplan | tee "${AGENT_TEMPDIRECTORY:-/tmp}/plan.txt"
+
+# Put the plan on the run's Summary tab so approvers can read it there.
+# Kept in the agent temp dir (not the artifact). Sensitive values are masked by terraform.
+SUMMARY="${AGENT_TEMPDIRECTORY:-/tmp}/plan-summary.md"
+{
+  echo "## Terraform plan: $(basename "$ENV_DIR")"
+  echo
+  echo "**$(grep -E '^(Plan:|No changes)' "${AGENT_TEMPDIRECTORY:-/tmp}/plan.txt" | head -1)**"
+  echo
+  echo '```'
+  head -n 400 "${AGENT_TEMPDIRECTORY:-/tmp}/plan.txt"
+  echo '```'
+} > "$SUMMARY"
+echo "##vso[task.uploadsummary]$SUMMARY"
