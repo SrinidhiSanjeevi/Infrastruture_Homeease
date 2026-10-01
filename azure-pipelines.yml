@@ -1,25 +1,3 @@
-# ============================================================
-# HomeEase Azure Terraform pipeline (Azure DevOps)
-#
-#   PR to main : fmt -> validate -> checkov -> plan dev/staging/prod
-#                (nothing is applied; the plans are the review material)
-#   main merge : same, then APPLY DEV ONLY, after a manual approval
-#                on the `homeease-dev` Environment.
-#                staging and prod are plan-only by design.
-#
-# Why two people merging at once cannot lose code:
-#   * Apply only ever runs on main, AFTER the merge, so it always
-#     contains every merged change, never a half-merged branch.
-#   * `lockBehavior: sequential` + the Exclusive Lock check on the
-#     environment queue the runs: run 2 waits for run 1, then plans
-#     against the new main and the new state.
-#   * The apply uses the saved plan file. If state changed after the
-#     plan was made, Terraform refuses it ("saved plan is stale")
-#     instead of overwriting. Re-run and it re-plans.
-#   * azurerm state uses a blob lease, so two writers cannot touch
-#     the same state at the same instant.
-# ============================================================
-
 trigger:
   branches:
     include: [main]
@@ -46,6 +24,15 @@ pool:
 variables:
   TF_VERSION: "1.13.5"
   TF_IN_AUTOMATION: "true"
+  TFLINT_VERSION: "0.53.0"
+  GITLEAKS_VERSION: "8.18.4"
+  INFRACOST_VERSION: "0.10.39"
+  # Read-only identity for plan jobs. Until azure-homeease-plan exists in
+  # Project settings > Service connections, plan keeps using the dev connection.
+  PLAN_CONNECTION: azure-homeease-dev
+  # Set to "false" only when PLAN_CONNECTION is the read-only identity
+  # (it cannot take the state lease, and plan does not need to).
+  PLAN_LOCK: "true"
 
 stages:
   - stage: Validate
@@ -54,6 +41,13 @@ stages:
       - job: validate
         steps:
           - template: pipelines/terraform-setup.yml
+
+          # Gate 1: no secrets in the repo.
+          - bash: |
+              set -euo pipefail
+              curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v$(GITLEAKS_VERSION)/gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz" | tar -xz gitleaks
+              ./gitleaks detect --source . --no-banner --redact --verbose
+            displayName: gitleaks (secret scan)
 
           - bash: terraform fmt -check -recursive -diff
             displayName: terraform fmt
@@ -69,6 +63,31 @@ stages:
               done
             displayName: terraform validate (all environments)
 
+          # Gate 3: lint (Azure SKUs/sizes, deprecated syntax).
+          - bash: |
+              set -euo pipefail
+              curl -fsSLo tflint.zip "https://github.com/terraform-linters/tflint/releases/download/v$(TFLINT_VERSION)/tflint_linux_amd64.zip"
+              unzip -oq tflint.zip tflint
+              ./tflint --init
+              ./tflint --recursive --minimum-failure-severity=error
+            displayName: tflint
+
+          # Gate 4: cost of the change. Needs a secret variable INFRACOST_API_KEY
+          # (free key from `infracost auth login`); skipped when it is not set.
+          - bash: |
+              set -euo pipefail
+              if [ -z "${INFRACOST_API_KEY:-}" ] || [ "$INFRACOST_API_KEY" = '$(INFRACOST_API_KEY)' ]; then
+                echo "INFRACOST_API_KEY not set - cost estimate skipped"; exit 0
+              fi
+              curl -fsSL "https://github.com/infracost/infracost/releases/download/v$(INFRACOST_VERSION)/infracost-linux-amd64.tar.gz" | tar -xz
+              ./infracost-linux-amd64 breakdown \
+                --path terraform/azure/environments/staging \
+                --terraform-var-file plan-only.tfvars.example \
+                --format table
+            displayName: infracost (monthly cost estimate)
+            env:
+              INFRACOST_API_KEY: $(INFRACOST_API_KEY)
+
           - bash: |
               pip install --quiet checkov
               # Policy + documented accepted risks live in .checkov.yaml
@@ -82,6 +101,7 @@ stages:
       - template: pipelines/terraform-plan.yml
         parameters:
           env: dev
+          serviceConnection: ${{ variables.PLAN_CONNECTION }}
           secureVarFile: dev.tfvars
 
   - stage: Plan_Staging
@@ -91,6 +111,7 @@ stages:
       - template: pipelines/terraform-plan.yml
         parameters:
           env: staging
+          serviceConnection: ${{ variables.PLAN_CONNECTION }}
 
   - stage: Plan_Prod
     displayName: Plan prod (plan only)
@@ -99,6 +120,7 @@ stages:
       - template: pipelines/terraform-plan.yml
         parameters:
           env: prod
+          serviceConnection: ${{ variables.PLAN_CONNECTION }}
 
   # Only after a merge to main, never for a PR. Environment
   # `homeease-dev` holds the Approval + Exclusive Lock checks.
@@ -125,10 +147,42 @@ stages:
                     azureSubscription: azure-homeease-dev
                     scriptType: bash
                     scriptLocation: inlineScript
-                    workingDirectory: $(Pipeline.Workspace)/plan-dev
+                    workingDirectory: $(Pipeline.Workspace)/plan-dev/environments/dev
                     inlineScript: |
                       set -euo pipefail
                       export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
                       chmod -R +x .terraform/providers || true
                       terraform init -input=false -reconfigure
                       terraform apply -input=false -lock-timeout=10m tfplan
+
+  # Staging and prod are plan-only in this project: the pipeline shows the
+  # promotion path and its approval gates, without deploying anything.
+  # Add Approval checks to the `homeease-staging` / `homeease-prod`
+  # Environments (Pipelines > Environments) to demonstrate the gate.
+  - stage: Apply_Staging
+    displayName: Apply staging (demo, nothing deployed)
+    dependsOn: [Apply_Dev, Plan_Staging]
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: apply_staging
+        environment: homeease-staging
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - bash: echo "Apply skipped for staging (demo). The saved plan-staging artifact would be applied here."
+                  displayName: terraform apply (demo)
+
+  - stage: Apply_Prod
+    displayName: Apply prod (demo, nothing deployed)
+    dependsOn: [Apply_Staging, Plan_Prod]
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: apply_prod
+        environment: homeease-prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - bash: echo "Apply skipped for prod (demo). The saved plan-prod artifact would be applied here after approval."
+                  displayName: terraform apply (demo)

@@ -1,0 +1,55 @@
+# Nightly drift detection for dev (and plan-only staging/prod).
+# Create it once: Pipelines > New pipeline > Existing YAML > this file.
+# `terraform plan -detailed-exitcode`: 0 = no changes, 1 = error, 2 = drift.
+# A drift (someone edited Azure in the portal) fails the run, and Azure DevOps
+# e-mails the pipeline owner (Project settings > Notifications).
+trigger: none
+pr: none
+
+schedules:
+  - cron: "30 20 * * *" # 20:30 UTC = 02:00 IST
+    displayName: Nightly drift check
+    branches:
+      include: [main]
+    always: true # run even when there was no commit
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TF_VERSION: "1.13.5"
+  TF_IN_AUTOMATION: "true"
+  PLAN_CONNECTION: azure-homeease-dev # switch to azure-homeease-plan (read-only) when it exists
+  PLAN_LOCK: "true"                   # "false" with the read-only identity
+
+jobs:
+  - job: drift_dev
+    displayName: Drift check (dev)
+    steps:
+      - template: terraform-setup.yml
+
+      - task: DownloadSecureFile@1
+        name: tfvars
+        inputs:
+          secureFile: dev.tfvars
+
+      - task: AzureCLI@2
+        displayName: terraform plan -detailed-exitcode (dev)
+        inputs:
+          azureSubscription: ${{ variables.PLAN_CONNECTION }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(Build.SourcesDirectory)/terraform/azure/environments/dev
+          inlineScript: |
+            set -uo pipefail
+            export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+            terraform init -input=false -reconfigure
+            terraform plan -input=false -lock="${PLAN_LOCK:-true}" -lock-timeout=10m \
+              -var-file="$(tfvars.secureFilePath)" -detailed-exitcode
+            rc=$?
+            if [ "$rc" -eq 2 ]; then
+              echo "##vso[task.logissue type=error]DRIFT: dev differs from the Terraform code. See the plan above."
+              echo "##vso[task.complete result=Failed;]Drift detected"
+              exit 0
+            fi
+            exit "$rc"

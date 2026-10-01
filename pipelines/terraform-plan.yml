@@ -1,4 +1,5 @@
 # Plan one environment and publish the plan file for a later apply.
+# The plan job needs only READ access (see PLAN_CONNECTION in azure-pipelines.yml).
 parameters:
   - name: env
     type: string
@@ -48,5 +49,7 @@ jobs:
       - task: PublishPipelineArtifact@1
         displayName: Publish plan
         inputs:
-          targetPath: $(Build.SourcesDirectory)/terraform/azure/environments/${{ parameters.env }}
+          # The whole tree, not just the env folder: modules live in ../../modules
+          # and the saved plan only works with the same layout it was made in.
+          targetPath: $(Build.SourcesDirectory)/terraform/azure
           artifact: plan-${{ parameters.env }}

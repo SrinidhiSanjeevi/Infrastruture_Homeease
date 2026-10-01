@@ -92,6 +92,11 @@ module "aks" {
   service_cidr   = var.service_cidr
   dns_service_ip = var.dns_service_ip
 
+  # Hardening switches: off until values are supplied in dev.tfvars.
+  admin_group_object_ids          = var.aks_admin_group_object_ids
+  local_account_disabled          = var.aks_local_account_disabled
+  api_server_authorized_ip_ranges = var.api_server_authorized_ip_ranges
+
   enable_diagnostics         = true
   log_analytics_workspace_id = module.monitoring.id
   enable_delete_lock         = false
@@ -115,6 +120,14 @@ module "keyvault" {
   sku_name = var.keyvault_sku
 
   public_network_access_enabled = var.keyvault_public_network_access_enabled
+
+  # Firewall: deny by default, allow the AKS subnet and named admin IPs.
+  network_acls = var.keyvault_restrict_network ? {
+    default_action             = "Deny"
+    bypass                     = "AzureServices"
+    ip_rules                   = var.keyvault_allowed_ip_ranges
+    virtual_network_subnet_ids = [module.networking.aks_subnet_id]
+  } : null
 
   enable_diagnostics         = true
   log_analytics_workspace_id = module.monitoring.id
@@ -217,6 +230,21 @@ module "workload_identity_notification" {
 
   # Same shared-vault trade-off as workload_identity_payment above
   key_vault_id = module.keyvault.id
+
+  tags = local.common_tags
+}
+
+# ============================================================
+# ALERTS (AKS CPU / memory -> e-mail)
+# ============================================================
+
+module "alerts" {
+  source = "../../modules/alerts"
+
+  name_prefix         = "homeease-${var.environment}"
+  resource_group_name = module.resource_group.name
+  aks_id              = module.aks.id
+  email_addresses     = var.budget_contact_emails
 
   tags = local.common_tags
 }

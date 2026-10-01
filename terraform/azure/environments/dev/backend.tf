@@ -5,6 +5,6 @@ terraform {
     storage_account_name = "tfstatehomeeaseayhiue"
     container_name       = "tfstate"
     key                  = "dev.terraform.tfstate"
-    use_azuread_auth     = true # <-- forces AAD token auth, never falls back to storage keys
+    use_azuread_auth     = true
   }
 }

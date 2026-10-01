@@ -214,3 +214,48 @@ variable "budget_contact_emails" {
   description = "Who receives budget alerts."
   type        = list(string)
 }
+
+# ============================================================
+# HARDENING (all optional; defaults keep today's behaviour)
+# ============================================================
+
+variable "aks_admin_group_object_ids" {
+  description = "Entra ID group object IDs with cluster-admin. Non-empty enables Entra ID + Azure RBAC on AKS."
+  type        = list(string)
+  default     = []
+}
+
+variable "aks_local_account_disabled" {
+  description = "Disable the static admin kubeconfig. Set true only together with aks_admin_group_object_ids."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.aks_local_account_disabled || length(var.aks_admin_group_object_ids) > 0
+    error_message = "aks_local_account_disabled needs aks_admin_group_object_ids, otherwise nobody can log in."
+  }
+}
+
+variable "api_server_authorized_ip_ranges" {
+  description = "CIDRs allowed to reach the Kubernetes API, e.g. [\"203.0.113.7/32\"]. Empty = open."
+  type        = list(string)
+  default     = []
+}
+
+variable "keyvault_restrict_network" {
+  description = "Turn on the Key Vault firewall (deny by default; allows the AKS subnet and keyvault_allowed_ip_ranges)."
+  type        = bool
+  default     = false
+}
+
+variable "keyvault_allowed_ip_ranges" {
+  description = "Public IPs/CIDRs allowed through the Key Vault firewall (your admin IP)."
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_tag_policy" {
+  description = "Assign the Azure Policy that denies resources missing the required tags. Needs Resource Policy Contributor for the pipeline identity (granted in bootstrap)."
+  type        = bool
+  default     = false
+}

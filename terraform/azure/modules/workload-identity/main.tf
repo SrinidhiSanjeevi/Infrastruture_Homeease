@@ -32,11 +32,7 @@ resource "azurerm_federated_identity_credential" "additional" {
     "${sa.namespace}/${sa.service_account_name}" => sa
   }
 
-  # Namespace-qualified only when it isn't the identity's home namespace,
-  # so existing credentials keep their names (Azure name is ForceNew).
-  # Without the qualifier, two namespaces sharing a service_account_name
-  # (e.g. "admin-backend" in both the home namespace and a Phase-1-shared
-  # one) would collide on the same Azure resource name.
+
   name = each.value.namespace == var.namespace ? "${var.federated_credential_name}-${each.value.service_account_name}" : "${var.federated_credential_name}-${each.value.service_account_name}-${each.value.namespace}"
 
   user_assigned_identity_id = azurerm_user_assigned_identity.homeease.id
@@ -59,8 +55,6 @@ resource "azurerm_role_assignment" "keyvault_secrets_user" {
   principal_id = azurerm_user_assigned_identity.homeease.principal_id
 }
 
-# Human admin assignment: create it from ONE identity module per vault only.
-# Azure rejects a second identical (principal, role, scope) assignment.
 resource "azurerm_role_assignment" "admin_secrets_officer" {
   count = var.admin_object_id != null ? 1 : 0
 

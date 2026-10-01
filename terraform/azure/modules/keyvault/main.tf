@@ -16,13 +16,9 @@ resource "azurerm_key_vault" "this" {
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
 
-  # Public access is retained for the current capstone.
-  # Private Endpoint can be added later.
   public_network_access_enabled = var.public_network_access_enabled
 
-  # Firewall. null keeps today's behaviour; set it to default_action = "Deny"
-  # (with bypass "AzureServices" and your IP/subnet allow-lists) to close
-  # the public endpoint without needing a Private Endpoint.
+
   dynamic "network_acls" {
     for_each = var.network_acls == null ? [] : [var.network_acls]
     content {
@@ -36,7 +32,6 @@ resource "azurerm_key_vault" "this" {
   tags = var.tags
 }
 
-# Audit trail: every secret read/write/delete is logged.
 resource "azurerm_monitor_diagnostic_setting" "this" {
   count = var.enable_diagnostics ? 1 : 0
 
