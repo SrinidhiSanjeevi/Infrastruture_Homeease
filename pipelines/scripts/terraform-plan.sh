@@ -19,6 +19,8 @@ ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
 export ARM_SUBSCRIPTION_ID
 
 terraform init -input=false -reconfigure
-terraform plan -input=false -lock-timeout=10m -var-file="$VARFILE" -out=tfplan
-terraform show -no-color tfplan > plan.txt
-echo "plan written to $(pwd)/plan.txt"
+# PLAN_LOCK=false when running with the read-only identity (no state lease).
+terraform plan -input=false -lock="${PLAN_LOCK:-true}" -lock-timeout=10m -var-file="$VARFILE" -out=tfplan
+# Show in the log only (sensitive values stay masked). No plan.txt file is
+# written, so nothing readable ends up in the downloadable artifact.
+terraform show -no-color tfplan

@@ -53,3 +53,13 @@ tfstate_storage_account_id = "YOUR-TFSTATE-STORAGE-ACCOUNT-ID"
 monthly_budget_amount = 50
 budget_start_date     = "2026-10-01T00:00:00Z"
 budget_contact_emails = ["you@example.com"]
+
+# ============================================================
+# HARDENING (optional, see docs/OPERATIONS.md)
+# ============================================================
+# aks_admin_group_object_ids      = ["<entra-group-object-id>"]
+# aks_local_account_disabled      = true   # only together with the group above
+# api_server_authorized_ip_ranges = ["<your-public-ip>/32"]
+# keyvault_restrict_network       = true
+# keyvault_allowed_ip_ranges      = ["<your-public-ip>"]
+# enable_tag_policy               = true   # after re-applying bootstrap

@@ -12,8 +12,16 @@ terraform {
     }
   }
 
-  backend "local" {
-    path = "bootstrap.tfstate"
+  # The state account created below also stores this root's own state.
+  # One-time move from the old local file:
+  #   terraform init -migrate-state -force-copy
+  # Then keep the local bootstrap.tfstate* files only as a backup.
+  backend "azurerm" {
+    resource_group_name  = "tfstate-rg"
+    storage_account_name = "tfstatehomeeaseayhiue"
+    container_name       = "tfstate"
+    key                  = "bootstrap.terraform.tfstate"
+    use_azuread_auth     = true
   }
 }
 
@@ -61,6 +69,14 @@ resource "azurerm_storage_account" "tfstate" {
 
   blob_properties {
     versioning_enabled = true
+
+    # Recovery from accidental delete/overwrite of a state file.
+    delete_retention_policy {
+      days = 30
+    }
+    container_delete_retention_policy {
+      days = 30
+    }
   }
 
   tags = merge(var.tags, {
@@ -151,4 +167,39 @@ resource "azurerm_role_assignment" "pipeline_rbac_admin" {
      )
     )
   EOT
+}
+
+# Policy assignments (e.g. the required-tags policy in environments/dev) are
+# not covered by Contributor. This role is limited to policy objects only.
+resource "azurerm_role_assignment" "pipeline_policy" {
+  scope                = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  role_definition_name = "Resource Policy Contributor"
+  principal_id         = var.pipeline_principal_object_id
+  principal_type       = "ServicePrincipal"
+}
+
+# ============================================================
+# Read-only PLAN identity (service connection azure-homeease-plan)
+#
+# plan jobs can read everything and the state, but cannot change Azure.
+# Only the apply identity above has write access. Optional: created once
+# plan_principal_object_id is set.
+# ============================================================
+
+resource "azurerm_role_assignment" "plan_reader" {
+  count = var.plan_principal_object_id == null ? 0 : 1
+
+  scope                = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  role_definition_name = "Reader"
+  principal_id         = var.plan_principal_object_id
+  principal_type       = "ServicePrincipal"
+}
+
+resource "azurerm_role_assignment" "plan_tfstate_reader" {
+  count = var.plan_principal_object_id == null ? 0 : 1
+
+  scope                = azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = var.plan_principal_object_id
+  principal_type       = "ServicePrincipal"
 }

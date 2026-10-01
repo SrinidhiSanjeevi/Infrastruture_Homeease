@@ -42,3 +42,9 @@ variable "pipeline_principal_object_id" {
   description = "Object ID of the Azure DevOps service connection's service principal (azure-homeease-dev). Entra ID > Enterprise applications > Object ID."
   type        = string
 }
+
+variable "plan_principal_object_id" {
+  description = "Object ID of the READ-ONLY service connection used by plan/drift jobs (azure-homeease-plan). null = not created yet; plan jobs keep using the apply connection."
+  type        = string
+  default     = null
+}
