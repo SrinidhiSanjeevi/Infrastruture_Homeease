@@ -21,3 +21,7 @@ output "frontend_url" {
 output "admin_frontend_url" {
   value = "http://${aws_lb.this.dns_name}:8081/"
 }
+
+output "frontend_https_url" {
+  value = var.certificate_arn != null ? "https://${aws_lb.this.dns_name}/" : null
+}

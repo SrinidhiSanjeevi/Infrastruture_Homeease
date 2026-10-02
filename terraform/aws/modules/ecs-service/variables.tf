@@ -141,3 +141,9 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "alarm_topic_arn" {
+  description = "SNS topic notified when this service's CPU/memory alarms change state. Null = alarms exist but notify nobody."
+  type        = string
+  default     = null
+}

@@ -18,3 +18,7 @@ output "tf_apply_role_arn" {
   description = "Set as this environment's GitHub Environment (fargate-dev) variable AWS_TF_APPLY_ROLE_ARN."
   value       = module.tf_apply_role.role_arn
 }
+
+output "alarm_topic_arn" {
+  value = aws_sns_topic.alarms.arn
+}

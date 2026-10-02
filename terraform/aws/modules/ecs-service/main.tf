@@ -201,6 +201,18 @@ resource "aws_ecs_service" "this" {
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
 
+  # A deploy whose tasks keep failing (bad image, bad config, failed
+  # health check) stops and rolls back to the last steady task
+  # definition instead of retrying forever.
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  # Only meaningful behind an ALB: lets a task finish starting before
+  # target-group health checks can mark it unhealthy and kill it.
+  health_check_grace_period_seconds = var.alb_target_group_arn != null ? 60 : null
+
   tags = var.tags
 
   lifecycle {
@@ -238,4 +250,56 @@ resource "aws_appautoscaling_policy" "cpu" {
     scale_in_cooldown  = 300
     scale_out_cooldown = 60
   }
+}
+
+# ============================================================
+# ALARMS — CPU and memory per service (needs no Container Insights;
+# these are the standard AWS/ECS service metrics). Notifications go to
+# alarm_topic_arn when set.
+# ============================================================
+
+resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  alarm_name          = "homeease-${var.environment}-${var.name}-cpu-high"
+  alarm_description   = "${var.name} average CPU above 85% for 10 minutes"
+  namespace           = "AWS/ECS"
+  metric_name         = "CPUUtilization"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 85
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ClusterName = var.cluster_name
+    ServiceName = aws_ecs_service.this.name
+  }
+
+  alarm_actions = var.alarm_topic_arn != null ? [var.alarm_topic_arn] : []
+  ok_actions    = var.alarm_topic_arn != null ? [var.alarm_topic_arn] : []
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "memory_high" {
+  alarm_name          = "homeease-${var.environment}-${var.name}-memory-high"
+  alarm_description   = "${var.name} average memory above 85% for 10 minutes"
+  namespace           = "AWS/ECS"
+  metric_name         = "MemoryUtilization"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 85
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ClusterName = var.cluster_name
+    ServiceName = aws_ecs_service.this.name
+  }
+
+  alarm_actions = var.alarm_topic_arn != null ? [var.alarm_topic_arn] : []
+  ok_actions    = var.alarm_topic_arn != null ? [var.alarm_topic_arn] : []
+
+  tags = var.tags
 }
