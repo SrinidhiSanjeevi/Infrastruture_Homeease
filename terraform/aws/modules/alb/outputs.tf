@@ -25,3 +25,8 @@ output "admin_frontend_url" {
 output "frontend_https_url" {
   value = var.certificate_arn != null ? "https://${aws_lb.this.dns_name}/" : null
 }
+
+output "arn_suffix" {
+  description = "Load balancer ARN suffix, used as the LoadBalancer dimension in CloudWatch."
+  value       = aws_lb.this.arn_suffix
+}

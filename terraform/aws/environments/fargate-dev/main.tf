@@ -43,19 +43,13 @@ data "terraform_remote_state" "registry" {
 # CLUSTER
 # ============================================================
 
-# Alarm notifications. Email subscriptions must be confirmed once by
-# clicking the link AWS sends to each address.
+# Alarm topic. No email subscription for now, so alarms are visible in
+# the CloudWatch console only. To get emails later, add an
+# aws_sns_topic_subscription (protocol "email") on this topic and
+# confirm the link AWS sends.
 resource "aws_sns_topic" "alarms" {
   name = "${local.resource_prefix}-alarms"
   tags = local.common_tags
-}
-
-resource "aws_sns_topic_subscription" "alarm_email" {
-  for_each = toset(var.budget_contact_emails)
-
-  topic_arn = aws_sns_topic.alarms.arn
-  protocol  = "email"
-  endpoint  = each.value
 }
 
 # CloudWatch alarms need permission to publish to the topic.
@@ -174,6 +168,33 @@ resource "aws_iam_role_policy" "exec_backend_secrets" {
   policy = data.aws_iam_policy_document.exec_backend_secrets.json
 }
 
+# ---- notification (notification-service only): mongo + email secrets ----
+
+resource "aws_iam_role" "exec_notification" {
+  name               = "${local.resource_prefix}-exec-notification"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
+  tags               = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "exec_notification" {
+  role       = aws_iam_role.exec_notification.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+data "aws_iam_policy_document" "exec_notification_secrets" {
+  statement {
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = values(data.terraform_remote_state.registry.outputs.notification_secret_arns)
+  }
+}
+
+resource "aws_iam_role_policy" "exec_notification_secrets" {
+  name   = "secrets-read"
+  role   = aws_iam_role.exec_notification.id
+  policy = data.aws_iam_policy_document.exec_notification_secrets.json
+}
+
 # ---- payment (payment-service only): own role, own blast radius ----
 
 resource "aws_iam_role" "exec_payment" {
@@ -277,15 +298,26 @@ module "backend" {
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/backend:${var.image_tags.backend}"
   container_port = 5000
 
+  # Callers of the booking backend: the two web frontends (proxied
+  # /api/), and the three services that call its internal API
+  # (admin-backend auth + data, payment-service booking updates,
+  # notification-service booking lookups).
   allowed_source_security_group_ids = {
-    frontend       = module.frontend.security_group_id
-    admin_frontend = module.admin_frontend.security_group_id
+    frontend             = module.frontend.security_group_id
+    admin_frontend       = module.admin_frontend.security_group_id
+    admin_backend        = module.admin_backend.security_group_id
+    payment_service      = module.payment_service.security_group_id
+    notification_service = module.notification_service.security_group_id
   }
 
   environment_variables = {
-    NODE_ENV                  = "production"
-    PORT                      = "5000"
-    PAYMENT_SERVICE_URL       = "http://payment-service.homeease.${var.environment}:5002"
+    NODE_ENV                 = "production"
+    PORT                     = "5000"
+    PAYMENT_SERVICE_URL      = "http://payment-service:5002"
+    NOTIFICATION_SERVICE_URL = "http://notification-service:5003"
+    # No Prometheus on AWS: publish the DB-truth business numbers to
+    # CloudWatch (Embedded Metric Format) from the metrics collector.
+    CLOUDWATCH_EMF_ENABLED    = "true"
     ALLOWED_ORIGINS           = var.allowed_origins
     METRICS_COLLECTOR_ENABLED = "true"
     # Images live in Azure Blob (persistent/azure-storage); the app
@@ -328,6 +360,10 @@ module "admin_backend" {
     PORT            = "5001"
     ALLOWED_ORIGINS = var.allowed_origins
 
+    # Admin reads bookings/users through the booking service (defaults
+    # to 127.0.0.1:5000, which is only right on a single host).
+    BOOKING_SERVICE_URL = "http://backend:5000"
+
     AZURE_STORAGE_ACCOUNT_NAME = var.azure_storage_account_name
   }
 
@@ -336,6 +372,42 @@ module "admin_backend" {
     JWT_SECRET = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["jwt-secret"]
 
     AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["azure-storage-account-key"]
+  }
+
+  tags = local.common_tags
+}
+
+module "notification_service" {
+  source = "../../modules/ecs-service"
+
+  name                          = "notification-service"
+  environment                   = var.environment
+  cluster_id                    = module.ecs_cluster.cluster_id
+  cluster_name                  = module.ecs_cluster.cluster_name
+  vpc_id                        = data.terraform_remote_state.registry.outputs.vpc_id
+  subnet_ids                    = data.terraform_remote_state.registry.outputs.private_subnet_ids
+  service_connect_namespace_arn = module.ecs_cluster.namespace_arn
+  alarm_topic_arn               = aws_sns_topic.alarms.arn
+  execution_role_arn            = aws_iam_role.exec_notification.arn
+
+  image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/notification-service:${var.notification_image_tag}"
+  container_port = 5003
+  max_capacity   = 2
+
+  # Only the booking backend sends notifications.
+  allowed_source_security_group_ids = { backend = module.backend.security_group_id }
+
+  environment_variables = {
+    NODE_ENV                  = "production"
+    PORT                      = "5003"
+    NOTIFICATION_SERVICE_PORT = "5003"
+    BOOKING_SERVICE_URL       = "http://backend:5000"
+  }
+
+  secrets = {
+    MONGO_URI  = data.terraform_remote_state.registry.outputs.notification_secret_arns["mongo-uri"]
+    EMAIL_USER = data.terraform_remote_state.registry.outputs.notification_secret_arns["email-user"]
+    EMAIL_PASS = data.terraform_remote_state.registry.outputs.notification_secret_arns["email-pass"]
   }
 
   tags = local.common_tags
@@ -366,6 +438,9 @@ module "payment_service" {
     NODE_ENV             = "production"
     PORT                 = "5002"
     PAYMENT_SERVICE_PORT = "5002"
+
+    # Payment confirms/creates payments against the booking service.
+    BOOKING_SERVICE_URL = "http://backend:5000"
   }
 
   secrets = {
@@ -410,6 +485,16 @@ data "aws_iam_policy_document" "tf_apply_extra" {
     sid       = "ClusterSettings"
     effect    = "Allow"
     actions   = ["ecs:UpdateCluster", "ecs:UpdateClusterSettings"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "Dashboard"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutDashboard", "cloudwatch:DeleteDashboards",
+      "cloudwatch:GetDashboard", "cloudwatch:ListDashboards",
+    ]
     resources = ["*"]
   }
 

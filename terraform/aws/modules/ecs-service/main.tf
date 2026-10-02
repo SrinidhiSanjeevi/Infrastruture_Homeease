@@ -188,8 +188,13 @@ resource "aws_ecs_service" "this" {
     service {
       port_name      = "http"
       discovery_name = var.name
+      # Short name on purpose: the images' nginx.conf proxies to
+      # "backend:5000" / "admin-backend:5001". Without dns_name, Service
+      # Connect only publishes "<name>.<namespace>" and those lookups
+      # fail with "host not found in upstream".
       client_alias {
-        port = var.container_port
+        port     = var.container_port
+        dns_name = var.name
       }
     }
   }
