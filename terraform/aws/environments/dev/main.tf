@@ -79,6 +79,15 @@ module "admin_backend_secrets" {
   tags = local.common_tags
 }
 
+module "notification_secrets" {
+  source = "../../modules/secrets"
+
+  name_prefix  = "homeease/${var.environment}/notification-service"
+  secret_names = ["mongo-uri", "email-user", "email-pass"]
+
+  tags = local.common_tags
+}
+
 module "payment_secrets" {
   source = "../../modules/secrets"
 
@@ -96,7 +105,7 @@ module "ecr" {
   source = "../../modules/ecr"
 
   namespace = "homeease"
-  services  = ["backend", "admin-backend", "frontend", "admin-frontend", "payment-service"]
+  services  = ["backend", "admin-backend", "frontend", "admin-frontend", "payment-service", "notification-service"]
 
   retained_image_count = 15
 

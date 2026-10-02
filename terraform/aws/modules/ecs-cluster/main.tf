@@ -60,7 +60,8 @@ resource "aws_ecs_cluster_capacity_providers" "this" {
 # The Fargate equivalent of Kubernetes Service DNS: backend.homeease
 # resolves to whichever tasks are currently healthy, client-side
 # load-balanced, no ALB hop for internal calls. This is what lets
-# frontend's nginx proxy /api/ to "backend:5000" exactly like it
+# frontend's nginx proxy /api/ to "backend:5000" (ecs-service sets the
+# client alias dns_name to the short service name so this resolves) exactly like it
 # already does inside the K8s cluster — same proxy_pass target,
 # different DNS backing it.
 # ============================================================

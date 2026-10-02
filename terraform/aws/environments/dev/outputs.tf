@@ -73,3 +73,7 @@ output "admin_backend_secret_arns" {
 output "payment_secret_arns" {
   value = module.payment_secrets.secret_arns
 }
+
+output "notification_secret_arns" {
+  value = module.notification_secrets.secret_arns
+}

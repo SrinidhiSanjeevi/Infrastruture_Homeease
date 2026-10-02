@@ -87,3 +87,9 @@ variable "azure_storage_account_name" {
   type        = string
   default     = "sthomeeaseimgayhiue"
 }
+
+variable "notification_image_tag" {
+  description = "Tag of homeease/notification-service in ECR. Pushed by hand (not part of aws-ci.yml yet)."
+  type        = string
+  default     = "v1"
+}
