@@ -27,3 +27,9 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "container_insights" {
+  description = "Enable CloudWatch Container Insights (CPU, memory, task-count metrics per service)."
+  type        = bool
+  default     = true
+}

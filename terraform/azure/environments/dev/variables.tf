@@ -259,3 +259,9 @@ variable "enable_tag_policy" {
   type        = bool
   default     = false
 }
+
+variable "acr_push_principal_ids" {
+  description = "Object IDs of service principals granted AcrPush on the registry. Default is the service principal behind the Azure DevOps service connection 'acr-homeease-wif-new'."
+  type        = list(string)
+  default     = ["c883c7ca-cc76-495a-8e42-c7456eb2992b"]
+}

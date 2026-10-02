@@ -65,6 +65,20 @@ module "acr" {
   tags = local.common_tags
 }
 
+# Identities allowed to push images: the service principal behind the Azure DevOps service
+# connection `acr-homeease-wif-new` used by the Docker@2 login/push steps. Without AcrPush the
+# login fails with "CouldNotFetchAccessForMSIDueToACRNotConfiguredProperly 401 Unauthorized".
+resource "azurerm_role_assignment" "acr_push" {
+  for_each = toset(var.acr_push_principal_ids)
+
+  scope                = module.acr.id
+  role_definition_name = "AcrPush"
+  principal_id         = each.value
+  principal_type       = "ServicePrincipal"
+
+  description = "Allows the Azure DevOps pipeline to push images to the registry."
+}
+
 # ============================================================
 # AKS
 # ============================================================

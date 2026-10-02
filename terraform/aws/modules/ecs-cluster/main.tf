@@ -25,13 +25,12 @@ terraform {
 resource "aws_ecs_cluster" "this" {
   name = var.cluster_name
 
-  # Container Insights is CloudWatch metrics billed per-metric — real
-  # money for a cluster this small. CloudWatch Logs (per-service, set
-  # up in the ecs-service module) already gives real log visibility
-  # without it.
+  # Container Insights gives per-service CPU/memory/task-count graphs
+  # in CloudWatch (the ECS counterpart of the Prometheus/Grafana stack
+  # on AKS). It is billed per metric, so it stays switchable.
   setting {
     name  = "containerInsights"
-    value = "disabled"
+    value = var.container_insights ? "enabled" : "disabled"
   }
 
   tags = var.tags

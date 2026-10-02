@@ -69,3 +69,21 @@ variable "allowed_origins" {
   type        = string
   default     = "*"
 }
+
+variable "container_insights" {
+  description = "CloudWatch Container Insights for the ECS cluster (per-service CPU/memory/task graphs)."
+  type        = bool
+  default     = true
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN to enable HTTPS on the ALB (port 443, with :80 redirecting). Leave null until a domain and certificate exist."
+  type        = string
+  default     = null
+}
+
+variable "azure_storage_account_name" {
+  description = "Azure Storage account holding service/professional images (persistent/azure-storage output storage_account_name)."
+  type        = string
+  default     = "sthomeeaseimgayhiue"
+}

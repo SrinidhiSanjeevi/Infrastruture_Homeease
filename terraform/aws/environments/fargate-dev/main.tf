@@ -43,8 +43,48 @@ data "terraform_remote_state" "registry" {
 # CLUSTER
 # ============================================================
 
+# Alarm notifications. Email subscriptions must be confirmed once by
+# clicking the link AWS sends to each address.
+resource "aws_sns_topic" "alarms" {
+  name = "${local.resource_prefix}-alarms"
+  tags = local.common_tags
+}
+
+resource "aws_sns_topic_subscription" "alarm_email" {
+  for_each = toset(var.budget_contact_emails)
+
+  topic_arn = aws_sns_topic.alarms.arn
+  protocol  = "email"
+  endpoint  = each.value
+}
+
+# CloudWatch alarms need permission to publish to the topic.
+data "aws_iam_policy_document" "alarms_topic" {
+  statement {
+    effect    = "Allow"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.alarms.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "alarms" {
+  arn    = aws_sns_topic.alarms.arn
+  policy = data.aws_iam_policy_document.alarms_topic.json
+}
+
 module "ecs_cluster" {
   source = "../../modules/ecs-cluster"
+
+  container_insights = var.container_insights
 
   cluster_name   = local.resource_prefix
   namespace_name = "homeease.${var.environment}"
@@ -64,6 +104,8 @@ module "alb" {
   environment       = var.environment
   vpc_id            = data.terraform_remote_state.registry.outputs.vpc_id
   public_subnet_ids = data.terraform_remote_state.registry.outputs.public_subnet_ids
+  certificate_arn   = var.certificate_arn
+  alarm_topic_arn   = aws_sns_topic.alarms.arn
 
   tags = local.common_tags
 }
@@ -185,6 +227,7 @@ module "frontend" {
   vpc_id                        = data.terraform_remote_state.registry.outputs.vpc_id
   subnet_ids                    = data.terraform_remote_state.registry.outputs.private_subnet_ids
   service_connect_namespace_arn = module.ecs_cluster.namespace_arn
+  alarm_topic_arn               = aws_sns_topic.alarms.arn
   execution_role_arn            = aws_iam_role.exec_web.arn
 
   image                 = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/frontend:${var.image_tags.frontend}"
@@ -206,6 +249,7 @@ module "admin_frontend" {
   vpc_id                        = data.terraform_remote_state.registry.outputs.vpc_id
   subnet_ids                    = data.terraform_remote_state.registry.outputs.private_subnet_ids
   service_connect_namespace_arn = module.ecs_cluster.namespace_arn
+  alarm_topic_arn               = aws_sns_topic.alarms.arn
   execution_role_arn            = aws_iam_role.exec_web.arn
 
   image                 = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/admin-frontend:${var.image_tags.admin_frontend}"
@@ -227,6 +271,7 @@ module "backend" {
   vpc_id                        = data.terraform_remote_state.registry.outputs.vpc_id
   subnet_ids                    = data.terraform_remote_state.registry.outputs.private_subnet_ids
   service_connect_namespace_arn = module.ecs_cluster.namespace_arn
+  alarm_topic_arn               = aws_sns_topic.alarms.arn
   execution_role_arn            = aws_iam_role.exec_backend.arn
 
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/backend:${var.image_tags.backend}"
@@ -243,6 +288,9 @@ module "backend" {
     PAYMENT_SERVICE_URL       = "http://payment-service.homeease.${var.environment}:5002"
     ALLOWED_ORIGINS           = var.allowed_origins
     METRICS_COLLECTOR_ENABLED = "true"
+    # Images live in Azure Blob (persistent/azure-storage); the app
+    # signs short-lived read URLs with the account key below.
+    AZURE_STORAGE_ACCOUNT_NAME = var.azure_storage_account_name
   }
 
   secrets = {
@@ -250,6 +298,8 @@ module "backend" {
     JWT_SECRET = data.terraform_remote_state.registry.outputs.backend_secret_arns["jwt-secret"]
     EMAIL_USER = data.terraform_remote_state.registry.outputs.backend_secret_arns["email-user"]
     EMAIL_PASS = data.terraform_remote_state.registry.outputs.backend_secret_arns["email-pass"]
+
+    AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.backend_secret_arns["azure-storage-account-key"]
   }
 
   tags = local.common_tags
@@ -265,6 +315,7 @@ module "admin_backend" {
   vpc_id                        = data.terraform_remote_state.registry.outputs.vpc_id
   subnet_ids                    = data.terraform_remote_state.registry.outputs.private_subnet_ids
   service_connect_namespace_arn = module.ecs_cluster.namespace_arn
+  alarm_topic_arn               = aws_sns_topic.alarms.arn
   execution_role_arn            = aws_iam_role.exec_backend.arn
 
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/admin-backend:${var.image_tags.admin_backend}"
@@ -276,11 +327,15 @@ module "admin_backend" {
     NODE_ENV        = "production"
     PORT            = "5001"
     ALLOWED_ORIGINS = var.allowed_origins
+
+    AZURE_STORAGE_ACCOUNT_NAME = var.azure_storage_account_name
   }
 
   secrets = {
     MONGO_URI  = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["mongo-uri"]
     JWT_SECRET = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["jwt-secret"]
+
+    AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["azure-storage-account-key"]
   }
 
   tags = local.common_tags
@@ -296,6 +351,7 @@ module "payment_service" {
   vpc_id                        = data.terraform_remote_state.registry.outputs.vpc_id
   subnet_ids                    = data.terraform_remote_state.registry.outputs.private_subnet_ids
   service_connect_namespace_arn = module.ecs_cluster.namespace_arn
+  alarm_topic_arn               = aws_sns_topic.alarms.arn
   execution_role_arn            = aws_iam_role.exec_payment.arn
 
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/payment-service:${var.image_tags.payment_service}"
@@ -348,6 +404,34 @@ data "aws_iam_policy_document" "tf_apply_extra" {
       "ecs:ListTagsForResource", "ecs:TagResource", "ecs:UntagResource",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid       = "ClusterSettings"
+    effect    = "Allow"
+    actions   = ["ecs:UpdateCluster", "ecs:UpdateClusterSettings"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "Alarms"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:DescribeAlarms",
+      "cloudwatch:ListTagsForResource", "cloudwatch:TagResource", "cloudwatch:UntagResource",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AlarmTopic"
+    effect = "Allow"
+    actions = [
+      "sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes",
+      "sns:Subscribe", "sns:Unsubscribe", "sns:GetSubscriptionAttributes",
+      "sns:ListSubscriptionsByTopic", "sns:ListTagsForResource", "sns:TagResource",
+    ]
+    resources = ["arn:aws:sns:${var.region}:${data.aws_caller_identity.current.account_id}:${local.resource_prefix}-*"]
   }
 
   statement {

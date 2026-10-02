@@ -65,7 +65,7 @@ module "backend_secrets" {
   source = "../../modules/secrets"
 
   name_prefix  = "homeease/${var.environment}/backend"
-  secret_names = ["mongo-uri", "jwt-secret", "email-user", "email-pass"]
+  secret_names = ["mongo-uri", "jwt-secret", "email-user", "email-pass", "azure-storage-account-key"]
 
   tags = local.common_tags
 }
@@ -74,7 +74,7 @@ module "admin_backend_secrets" {
   source = "../../modules/secrets"
 
   name_prefix  = "homeease/${var.environment}/admin-backend"
-  secret_names = ["mongo-uri", "jwt-secret"]
+  secret_names = ["mongo-uri", "jwt-secret", "azure-storage-account-key"]
 
   tags = local.common_tags
 }
