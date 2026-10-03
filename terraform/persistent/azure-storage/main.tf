@@ -42,8 +42,17 @@ resource "azurerm_storage_container" "professionals" {
   container_access_type = "private"
 }
 
+# The identity lives in environments/dev; apply that root first. Looking it up by name keeps this
+# grant correct after the cluster/identities are rebuilt (a hard-coded ID went stale and broke images).
+data "azurerm_user_assigned_identity" "app" {
+  count               = var.workload_identity_principal_id == null ? 1 : 0
+  name                = var.workload_identity_name
+  resource_group_name = var.workload_identity_resource_group_name
+}
+
 resource "azurerm_role_assignment" "blob_data_contributor" {
   scope                = azurerm_storage_account.images.id
   role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.workload_identity_principal_id
+  principal_id         = coalesce(var.workload_identity_principal_id, one(data.azurerm_user_assigned_identity.app[*].principal_id))
+  principal_type       = "ServicePrincipal"
 }
