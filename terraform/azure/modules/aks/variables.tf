@@ -128,3 +128,15 @@ variable "api_server_authorized_ip_ranges" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_container_insights" {
+  description = "Enable the Container Insights (oms_agent) add-on. Off on small clusters that already run Prometheus/Loki."
+  type        = bool
+  default     = true
+}
+
+variable "image_cleaner_enabled" {
+  description = "Enable the AKS image cleaner (eraser). Off on small clusters where its CPU requests starve workloads."
+  type        = bool
+  default     = true
+}
