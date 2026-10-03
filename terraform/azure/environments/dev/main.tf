@@ -111,6 +111,11 @@ module "aks" {
   local_account_disabled          = var.aks_local_account_disabled
   api_server_authorized_ip_ranges = var.api_server_authorized_ip_ranges
 
+  # Subscription quota is 4 regional vCPUs (2 x D2s_v5, cannot scale out): drop the add-ons that
+  # duplicate Prometheus/Loki or only free disk, so the workloads schedule.
+  enable_container_insights = false
+  image_cleaner_enabled     = false
+
   enable_diagnostics         = true
   log_analytics_workspace_id = module.monitoring.id
   enable_delete_lock         = false

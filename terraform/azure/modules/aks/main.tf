@@ -19,7 +19,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   node_os_upgrade_channel   = "NodeImage"
 
   # Removes stale, vulnerable images from nodes.
-  image_cleaner_enabled        = true
+  image_cleaner_enabled        = var.image_cleaner_enabled
   image_cleaner_interval_hours = 48
 
   # Built-in Azure Policy add-on (pod security baselines via Gatekeeper).
@@ -85,9 +85,10 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
-  # Container Insights (metrics + container logs).
+  # Container Insights (metrics + container logs). Separate switch: on a small cluster it costs
+  # ~500m CPU of requests and duplicates the Prometheus/Loki stack.
   dynamic "oms_agent" {
-    for_each = var.enable_diagnostics ? [1] : []
+    for_each = var.enable_container_insights ? [1] : []
     content {
       log_analytics_workspace_id      = var.log_analytics_workspace_id
       msi_auth_for_monitoring_enabled = true
