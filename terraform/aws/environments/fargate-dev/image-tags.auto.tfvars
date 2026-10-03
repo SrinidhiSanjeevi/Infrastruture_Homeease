@@ -8,7 +8,7 @@
 # ============================================================
 
 image_tags = {
-  backend         = "metrics-1"
+  backend         = "metrics-2"
   admin_backend   = "89617ff8897b"
   frontend        = "89617ff8897b"
   admin_frontend  = "89617ff8897b"
