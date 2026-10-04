@@ -9,7 +9,7 @@
 
 image_tags = {
   backend              = "metrics-2"
-  admin_backend        = "89617ff8897b"
+  admin_backend        = "c69dc12d2305"
   frontend             = "c69dc12d2305"
   admin_frontend       = "c69dc12d2305"
   payment_service      = "89617ff8897b"
