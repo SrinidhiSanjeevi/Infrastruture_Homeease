@@ -443,6 +443,8 @@ module "payment_service" {
     NODE_ENV             = "production"
     PORT                 = "5002"
     PAYMENT_SERVICE_PORT = "5002"
+    # Publish the DB-backed payment gauges to CloudWatch (no Prometheus on AWS).
+    CLOUDWATCH_EMF_ENABLED = "true"
 
     # Payment confirms/creates payments against the booking service.
     BOOKING_SERVICE_URL = "http://backend:5000"

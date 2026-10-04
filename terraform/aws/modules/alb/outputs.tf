@@ -30,3 +30,13 @@ output "arn_suffix" {
   description = "Load balancer ARN suffix, used as the LoadBalancer dimension in CloudWatch."
   value       = aws_lb.this.arn_suffix
 }
+
+output "frontend_tg_arn_suffix" {
+  description = "Target group ARN suffix (CloudWatch TargetGroup dimension)."
+  value       = aws_lb_target_group.frontend.arn_suffix
+}
+
+output "admin_frontend_tg_arn_suffix" {
+  description = "Target group ARN suffix (CloudWatch TargetGroup dimension)."
+  value       = aws_lb_target_group.admin_frontend.arn_suffix
+}
