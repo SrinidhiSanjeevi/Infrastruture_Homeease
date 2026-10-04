@@ -13,5 +13,5 @@ image_tags = {
   frontend             = "c69dc12d2305"
   admin_frontend       = "c69dc12d2305"
   payment_service      = "c69dc12d2305"
-  notification_service = "v1"
+  notification_service = "c69dc12d2305"
 }
