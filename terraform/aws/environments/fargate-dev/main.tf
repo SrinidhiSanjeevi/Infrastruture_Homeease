@@ -317,7 +317,11 @@ module "backend" {
     NOTIFICATION_SERVICE_URL = "http://notification-service:5003"
     # No Prometheus on AWS: publish the DB-truth business numbers to
     # CloudWatch (Embedded Metric Format) from the metrics collector.
-    CLOUDWATCH_EMF_ENABLED    = "true"
+    CLOUDWATCH_EMF_ENABLED = "true"
+    # ALB + frontend nginx + Service Connect sidecar sit in front of the
+    # backend; without this every client looks like 127.0.0.1 and all
+    # users share one rate-limit bucket.
+    TRUST_PROXY_HOPS          = "2"
     ALLOWED_ORIGINS           = var.allowed_origins
     METRICS_COLLECTOR_ENABLED = "true"
     # Images live in Azure Blob (persistent/azure-storage); the app
@@ -363,6 +367,7 @@ module "admin_backend" {
     # Admin reads bookings/users through the booking service (defaults
     # to 127.0.0.1:5000, which is only right on a single host).
     BOOKING_SERVICE_URL = "http://backend:5000"
+    TRUST_PROXY_HOPS    = "2"
 
     AZURE_STORAGE_ACCOUNT_NAME = var.azure_storage_account_name
   }
@@ -390,7 +395,7 @@ module "notification_service" {
   alarm_topic_arn               = aws_sns_topic.alarms.arn
   execution_role_arn            = aws_iam_role.exec_notification.arn
 
-  image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/notification-service:${var.notification_image_tag}"
+  image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/notification-service:${var.image_tags.notification_service}"
   container_port = 5003
   max_capacity   = 2
 

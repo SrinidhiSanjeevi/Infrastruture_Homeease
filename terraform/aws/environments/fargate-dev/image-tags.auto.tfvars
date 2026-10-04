@@ -8,9 +8,10 @@
 # ============================================================
 
 image_tags = {
-  backend         = "metrics-2"
-  admin_backend   = "89617ff8897b"
-  frontend        = "89617ff8897b"
-  admin_frontend  = "89617ff8897b"
-  payment_service = "89617ff8897b"
+  backend              = "metrics-2"
+  admin_backend        = "89617ff8897b"
+  frontend             = "89617ff8897b"
+  admin_frontend       = "89617ff8897b"
+  payment_service      = "89617ff8897b"
+  notification_service = "v1"
 }

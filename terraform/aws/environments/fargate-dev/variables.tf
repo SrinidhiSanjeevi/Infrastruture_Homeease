@@ -50,11 +50,12 @@ variable "budget_contact_emails" {
 
 variable "image_tags" {
   type = object({
-    backend         = string
-    admin_backend   = string
-    frontend        = string
-    admin_frontend  = string
-    payment_service = string
+    backend              = string
+    admin_backend        = string
+    frontend             = string
+    admin_frontend       = string
+    payment_service      = string
+    notification_service = string
   })
 }
 
@@ -88,8 +89,3 @@ variable "azure_storage_account_name" {
   default     = "sthomeeaseimgayhiue"
 }
 
-variable "notification_image_tag" {
-  description = "Tag of homeease/notification-service in ECR. Pushed by hand (not part of aws-ci.yml yet)."
-  type        = string
-  default     = "v1"
-}
