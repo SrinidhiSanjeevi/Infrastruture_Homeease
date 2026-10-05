@@ -42,3 +42,7 @@ crash.*.log
 # Local-only: state/tfvars archived from the expired subscription, and apply logs
 _old-subscription-archive/
 apply.log
+
+# Merge leftovers
+*.orig
+*.rej
