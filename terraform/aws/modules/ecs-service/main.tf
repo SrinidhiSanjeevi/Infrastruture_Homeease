@@ -4,11 +4,11 @@
 # per HomeEase service in environments/fargate-dev/main.tf, the same
 # way charts/<service>/ is one Helm chart per service in gitops_homeease.
 #
-# No container-level healthCheck override here on purpose: every image
-# already ships a Docker HEALTHCHECK instruction (wget against
-# /health/live or /health) from app_Homeease's Dockerfiles — ECS
-# Fargate reads that natively. The same healthcheck that already works
-# under docker-compose works here unchanged.
+# The container health check is declared in the task definition below.
+# ECS ignores the Dockerfile HEALTHCHECK instruction (only docker and
+# docker-compose read it), so without this block the container status
+# stays UNKNOWN and a hung process is never replaced. It runs the same
+# wget probe the Dockerfiles use.
 # ============================================================
 
 terraform {
@@ -119,6 +119,14 @@ resource "aws_ecs_task_definition" "this" {
           protocol      = "tcp"
         }
       ]
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "wget -q --spider http://127.0.0.1:${var.container_port}${var.health_check_path} || exit 1"]
+        interval    = 15
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
 
       environment = [
         for k, v in var.environment_variables : { name = k, value = v }

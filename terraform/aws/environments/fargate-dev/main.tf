@@ -253,6 +253,7 @@ module "frontend" {
 
   image                 = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/frontend:${var.image_tags.frontend}"
   container_port        = 8080
+  health_check_path     = "/health"
   attach_alb            = true
   alb_security_group_id = module.alb.security_group_id
   alb_target_group_arn  = module.alb.frontend_target_group_arn
@@ -275,6 +276,7 @@ module "admin_frontend" {
 
   image                 = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/admin-frontend:${var.image_tags.admin_frontend}"
   container_port        = 8080
+  health_check_path     = "/health"
   attach_alb            = true
   alb_security_group_id = module.alb.security_group_id
   alb_target_group_arn  = module.alb.admin_frontend_target_group_arn
@@ -321,7 +323,12 @@ module "backend" {
     # ALB + frontend nginx + Service Connect sidecar sit in front of the
     # backend; without this every client looks like 127.0.0.1 and all
     # users share one rate-limit bucket.
-    TRUST_PROXY_HOPS          = "2"
+    TRUST_PROXY_HOPS = "2"
+    # Demo: people on one wifi share a public IP, so the defaults (10 sign-ins / 200 calls per 15 min) lock them out.
+    RATE_LIMIT_AUTH_MAX       = "300"
+    RATE_LIMIT_GENERAL_MAX    = "5000"
+    RATE_LIMIT_PAYMENT_MAX    = "200"
+    RATE_LIMIT_EMERGENCY_MAX  = "200"
     ALLOWED_ORIGINS           = var.allowed_origins
     METRICS_COLLECTOR_ENABLED = "true"
     # Images live in Azure Blob (persistent/azure-storage); the app

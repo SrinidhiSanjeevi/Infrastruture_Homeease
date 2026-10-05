@@ -37,6 +37,12 @@ variable "container_port" {
   type = number
 }
 
+variable "health_check_path" {
+  description = "HTTP path the container health check calls on 127.0.0.1:container_port. Backends serve /health/live, the nginx frontends serve /health."
+  type        = string
+  default     = "/health/live"
+}
+
 variable "cpu" {
   description = "Fargate task-level vCPU units (256 = 0.25 vCPU). Must be a valid Fargate CPU/memory pair."
   type        = number
