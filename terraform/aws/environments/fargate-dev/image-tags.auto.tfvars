@@ -9,7 +9,7 @@
 
 image_tags = {
   backend              = "301b844fbb44"
-  admin_backend        = "c69dc12d2305"
+  admin_backend        = "301b844fbb44"
   frontend             = "301b844fbb44"
   admin_frontend       = "301b844fbb44"
   payment_service      = "301b844fbb44"
