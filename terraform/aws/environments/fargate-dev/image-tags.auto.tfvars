@@ -11,7 +11,7 @@ image_tags = {
   backend              = "c3c0aabad723"
   admin_backend        = "301b844fbb44"
   frontend             = "c3c0aabad723"
-  admin_frontend       = "a2822dbb135f"
+  admin_frontend       = "c3c0aabad723"
   payment_service      = "301b844fbb44"
   notification_service = "a2822dbb135f"
 }
