@@ -104,6 +104,16 @@ module "alb" {
   tags = local.common_tags
 }
 
+# HTTPS without a domain: CloudFront's free *.cloudfront.net name and certificate in front of the ALB.
+module "cloudfront" {
+  source = "../../modules/cloudfront"
+
+  environment  = var.environment
+  alb_dns_name = module.alb.dns_name
+
+  tags = local.common_tags
+}
+
 # ============================================================
 # TASK EXECUTION ROLES — three, not one, mirroring the exact same
 # split already made twice on the other two clouds (Azure Workload
