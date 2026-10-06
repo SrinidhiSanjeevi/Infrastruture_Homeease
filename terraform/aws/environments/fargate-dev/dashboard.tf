@@ -40,7 +40,7 @@ locals {
   log_source = join(" | ", [for g in local.log_groups : "SOURCE '${g}'"])
 
   # --- metric helpers --------------------------------------------------------
-  total_metric = { for n in ["TotalBookings", "TotalUsers", "TotalServices", "TotalProfessionals", "AvailableProfessionals", "TotalEmergencies", "ActiveEmergencies", "Revenue", "PendingBookings"] : n => ["HomeEase", n, "Scope", "totals"] }
+  total_metric = { for n in ["TotalBookings", "TotalUsers", "TotalServices", "TotalProfessionals", "AvailableProfessionals", "TotalEmergencies", "ActiveEmergencies", "Revenue", "PendingBookings", "UpcomingBookings"] : n => ["HomeEase", n, "Scope", "totals"] }
   booking_m    = { for s in local.booking_statuses : s => ["HomeEase", "Bookings", "Scope", "bookings", "Status", s] }
   pay_count_m  = { for s in local.payment_statuses : s => ["HomeEase", "PaymentRecords", "Scope", "payments", "Status", s] }
   pay_amount_m = { for s in local.payment_statuses : s => ["HomeEase", "PaymentAmount", "Scope", "payments", "Status", s] }
@@ -198,7 +198,8 @@ resource "aws_cloudwatch_dashboard" "business" {
             concat(local.booking_m["Created"], [{ id = "m1", visible = false }]),
             concat(local.booking_m["Assigned"], [{ id = "m2", visible = false }]),
             concat(local.booking_m["Confirmed"], [{ id = "m3", visible = false }]),
-            concat(local.booking_m["Assigned"], [{ label = "Awaiting a professional (Assigned)", id = "m4" }]),
+            concat(local.total_metric["PendingBookings"], [{ label = "Pending (today)" }]),
+            concat(local.total_metric["UpcomingBookings"], [{ label = "Upcoming (later days)" }]),
           ]
         }
       },
@@ -282,9 +283,10 @@ resource "aws_cloudwatch_dashboard" "business" {
       {
         type = "metric", x = 12, y = 18, width = 12, height = 6
         properties = {
-          title = "Pending (Created + Assigned) and active emergencies", view = "timeSeries", region = local.cw_region, stat = "Maximum", period = 60
+          title = "Pending (today), upcoming and active emergencies", view = "timeSeries", region = local.cw_region, stat = "Maximum", period = 60
           metrics = [
-            concat(local.total_metric["PendingBookings"], [{ label = "Pending bookings" }]),
+            concat(local.total_metric["PendingBookings"], [{ label = "Pending bookings (today)" }]),
+            concat(local.total_metric["UpcomingBookings"], [{ label = "Upcoming bookings" }]),
             concat(local.total_metric["ActiveEmergencies"], [{ label = "Active emergencies" }]),
           ]
         }
