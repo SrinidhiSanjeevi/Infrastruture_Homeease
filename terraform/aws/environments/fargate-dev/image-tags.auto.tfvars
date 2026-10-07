@@ -8,7 +8,7 @@
 # ============================================================
 
 image_tags = {
-  backend              = "cc6644b40fbd"
+  backend              = "e5c001d773cd"
   admin_backend        = "c3c0aabad723"
   frontend             = "e5c001d773cd"
   admin_frontend       = "e5c001d773cd"
