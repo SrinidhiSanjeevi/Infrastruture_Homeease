@@ -33,8 +33,16 @@ data "aws_cloudfront_origin_request_policy" "all_viewer" {
 
 locals {
   distributions = {
-    app   = { origin_port = 80, comment = "HomeEase ${var.environment} customer app" }
-    admin = { origin_port = 8081, comment = "HomeEase ${var.environment} admin console" }
+    app = {
+      origin_port = var.app_origin_port
+      origin_dns  = coalesce(var.app_origin_dns_name, var.alb_dns_name)
+      comment     = "HomeEase ${var.environment} customer app"
+    }
+    admin = {
+      origin_port = var.admin_origin_port
+      origin_dns  = coalesce(var.admin_origin_dns_name, var.alb_dns_name)
+      comment     = "HomeEase ${var.environment} admin console"
+    }
   }
 }
 
@@ -47,7 +55,7 @@ resource "aws_cloudfront_distribution" "this" {
   price_class     = "PriceClass_200" # includes India; PriceClass_100 would route Indian users via Europe/US
 
   origin {
-    domain_name = var.alb_dns_name
+    domain_name = each.value.origin_dns
     origin_id   = "alb"
 
     custom_origin_config {

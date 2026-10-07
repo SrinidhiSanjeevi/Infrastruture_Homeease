@@ -1,0 +1,189 @@
+# AWS EKS - plan / apply, then bootstrap Argo CD, then put CloudFront in front.
+#
+# Manual by design (workflow_dispatch): choosing action=apply IS the approval. The job cannot use a GitHub
+# "environment:" gate because the AWS role trusts the branch-form OIDC subject (repo:...:ref:refs/heads/main);
+# an environment-form subject would not match it.
+#
+# Three jobs, each re-authenticating, because the OIDC role session is capped at 1 hour and EKS creation
+# plus bootstrap plus CloudFront can exceed that in one job.
+#
+#   infra      terraform plan (and apply)  environments/eks-dev, enable_cloudfront=false
+#   bootstrap  helm: CSI driver, ingress-nginx x2, Argo CD -> root Application (GitOps takes over here)
+#   edge       terraform apply with enable_cloudfront=true once the NLBs exist
+#
+# Needed in this repository (Settings > Secrets and variables > Actions):
+#   Variable  AWS_TF_APPLY_ROLE_ARN   output tf_apply_role_arn of the first (local) apply of eks-dev
+#   Secrets   GITOPS_REPO_PAT         read access to the GitOps repository (checkout of the bootstrap script)
+#             GRAFANA_ADMIN_PASSWORD, ALERTMANAGER_SMTP_PASSWORD
+name: aws-eks-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "plan = show changes only; apply = create/update the cluster"
+        type: choice
+        options: [plan, apply]
+        default: plan
+      bootstrap:
+        description: "After apply: install Argo CD and the cluster add-ons (needed on a fresh cluster)"
+        type: boolean
+        default: true
+      cloudfront:
+        description: "After bootstrap: create CloudFront in front of the ingress load balancers"
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: aws-eks-apply
+  cancel-in-progress: false # never interrupt a running apply
+
+env:
+  TF_DIR: terraform/aws/environments/eks-dev
+  AWS_REGION: ap-south-1
+  CLUSTER: homeease-eks-dev
+  TF_IN_AUTOMATION: "true"
+  # *.tfvars is gitignored, so CI passes the two required values explicitly.
+  TF_VAR_registry_state_bucket: tfstate-homeease-aws-ukrvn9
+  TF_VAR_budget_contact_emails: ${{ vars.BUDGET_CONTACT_EMAILS || '["srinidhip.s@zapcg.com"]' }}
+
+jobs:
+  infra:
+    name: Terraform (${{ inputs.action }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: homeease-eks-infra-${{ github.run_id }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.0"
+          terraform_wrapper: false
+
+      - name: Format check
+        run: terraform fmt -check -recursive terraform/aws/modules/eks terraform/aws/modules/irsa terraform/aws/environments/eks-dev
+
+      - name: Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -o pipefail
+          terraform plan -input=false -out=tfplan -var enable_cloudfront=false 2>&1 | tee plan.txt
+          {
+            echo '### terraform plan (eks-dev)'
+            echo '```'
+            tail -n 60 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply
+        if: inputs.action == 'apply'
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false tfplan
+
+      - name: Outputs
+        if: inputs.action == 'apply'
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          {
+            echo '### EKS applied'
+            echo '```'
+            terraform output
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  bootstrap:
+    name: Bootstrap Argo CD and add-ons
+    needs: infra
+    if: inputs.action == 'apply' && inputs.bootstrap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the GitOps repository (bootstrap script, charts, Argo CD apps)
+        uses: actions/checkout@v4
+        with:
+          repository: SrinidhiSanjeevi/Gitops_Homeease
+          token: ${{ secrets.GITOPS_REPO_PAT }}
+          ref: main
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: homeease-eks-bootstrap-${{ github.run_id }}
+
+      - name: Bootstrap
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          ALERTMANAGER_SMTP_PASSWORD: ${{ secrets.ALERTMANAGER_SMTP_PASSWORD }}
+          CLUSTER: ${{ env.CLUSTER }}
+          REGION: ${{ env.AWS_REGION }}
+        run: bash scripts/bootstrap-eks.sh
+
+      - name: Wait for both ingress load balancers
+        run: |
+          for svc in ingress-nginx-controller ingress-nginx-admin-controller; do
+            for i in $(seq 1 40); do
+              host=$(kubectl get svc -n ingress-nginx "$svc" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+              [ -n "$host" ] && { echo "$svc -> $host"; break; }
+              [ "$i" = 40 ] && { echo "::error::$svc never received a load balancer hostname"; exit 1; }
+              sleep 15
+            done
+          done
+
+      - name: Argo CD application status
+        run: kubectl get applications -n argocd
+
+  edge:
+    name: CloudFront (HTTPS)
+    needs: bootstrap
+    if: inputs.action == 'apply' && inputs.bootstrap && inputs.cloudfront
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: homeease-eks-edge-${{ github.run_id }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.0"
+          terraform_wrapper: false
+
+      - name: Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Apply with CloudFront
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false -auto-approve -var enable_cloudfront=true
+
+      - name: URLs
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          {
+            echo '### HomeEase on EKS'
+            echo "- Customer: $(terraform output -raw app_url)"
+            echo "- Admin: $(terraform output -raw admin_url)"
+          } >> "$GITHUB_STEP_SUMMARY"
