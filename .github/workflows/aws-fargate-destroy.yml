@@ -1,0 +1,123 @@
+# AWS ECS Fargate - decommission environments/fargate-dev.
+#
+# The code stays in the repository (environments/fargate-dev, modules/ecs-service, ...); this only destroys the
+# RUNNING resources, so the Fargate path can be re-applied later from the same code.
+#
+# Safety rails, in order:
+#   1. you must type the confirmation phrase
+#   2. the EKS cluster must be ACTIVE
+#   3. the EKS-served customer site must answer HTTP 200 - ECS is not destroyed while it is the only thing working
+#   4. CloudTrail, GuardDuty and the audit-log bucket are detached from state first (default), so the audit
+#      trail is not deleted with the compute stack (a non-empty bucket would also block the destroy)
+#
+# Needs the OPT-IN role from environments/eks-dev (create_fargate_teardown_role = true) as the repository
+# variable AWS_FARGATE_TEARDOWN_ROLE_ARN. If you prefer not to create that broad role, run the same steps
+# locally with your own credentials (README, "Decommission ECS").
+name: aws-fargate-destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type destroy-fargate-dev to confirm"
+        type: string
+        required: true
+      keep_security_baseline:
+        description: "Keep CloudTrail, GuardDuty and the audit bucket (detach from state, do not delete)"
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: aws-fargate-destroy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  TF_IN_AUTOMATION: "true"
+  TF_VAR_registry_state_bucket: tfstate-homeease-aws-ukrvn9
+  TF_VAR_budget_contact_emails: ${{ vars.BUDGET_CONTACT_EMAILS || '["srinidhip.s@zapcg.com"]' }}
+
+jobs:
+  destroy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Confirm
+        run: |
+          if [ "${{ inputs.confirm }}" != "destroy-fargate-dev" ]; then
+            echo "::error::Confirmation phrase did not match. Nothing was changed."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_FARGATE_TEARDOWN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: homeease-fargate-destroy-${{ github.run_id }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.0"
+          terraform_wrapper: false
+
+      - name: Rail 2 - EKS cluster is ACTIVE
+        run: |
+          status=$(aws eks describe-cluster --name homeease-eks-dev --query 'cluster.status' --output text 2>/dev/null || echo MISSING)
+          echo "EKS status: $status"
+          [ "$status" = "ACTIVE" ] || { echo "::error::EKS is not ACTIVE; refusing to destroy the only working compute path."; exit 1; }
+
+      - name: Rail 3 - EKS-served site answers 200
+        run: |
+          cd terraform/aws/environments/eks-dev
+          terraform init -input=false >/dev/null
+          url=$(terraform output -raw app_url 2>/dev/null || true)
+          [ -n "$url" ] && [ "$url" != "null" ] || { echo "::error::eks-dev has no app_url (CloudFront not applied). Refusing."; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url")
+          echo "$url -> $code"
+          [ "$code" = "200" ] || { echo "::error::EKS site returned $code; refusing."; exit 1; }
+
+      - name: Init fargate-dev
+        working-directory: terraform/aws/environments/fargate-dev
+        run: terraform init -input=false
+
+      - name: Rail 4 - detach the audit baseline from state
+        if: inputs.keep_security_baseline
+        working-directory: terraform/aws/environments/fargate-dev
+        run: |
+          for addr in \
+            aws_cloudtrail.this \
+            aws_guardduty_detector.this \
+            aws_s3_bucket_policy.audit_logs \
+            aws_s3_bucket_lifecycle_configuration.audit_logs \
+            aws_s3_bucket_server_side_encryption_configuration.audit_logs \
+            aws_s3_bucket_public_access_block.audit_logs \
+            aws_s3_bucket.audit_logs ; do
+            if terraform state list | grep -qx "$addr"; then
+              terraform state rm "$addr"
+            else
+              echo "not in state, skipping: $addr"
+            fi
+          done
+
+      - name: Plan destroy
+        working-directory: terraform/aws/environments/fargate-dev
+        run: |
+          terraform plan -destroy -input=false -out=destroy.tfplan | tail -n 40
+
+      - name: Destroy
+        working-directory: terraform/aws/environments/fargate-dev
+        run: terraform apply -input=false destroy.tfplan
+
+      - name: Summary
+        run: |
+          {
+            echo '### ECS Fargate stack destroyed'
+            echo "- Code is untouched; re-apply from environments/fargate-dev to bring it back."
+            echo "- Audit baseline kept: ${{ inputs.keep_security_baseline }}"
+          } >> "$GITHUB_STEP_SUMMARY"

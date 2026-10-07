@@ -1,3 +1,6 @@
+> **Update 2026-10-07:** the `eks` and `irsa` modules were promoted to `terraform/aws/modules/` and are used by
+> `environments/eks-dev` (see `docs/adr/0002-eks-with-gitops-on-aws.md`). This folder is kept as history.
+
 # Parked — EKS (Kubernetes on AWS) reference
 
 **Not applied. Not planned by any CI workflow.** This is the Kubernetes
