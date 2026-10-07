@@ -365,11 +365,12 @@ module "backend" {
 
     AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.backend_secret_arns["azure-storage-account-key"]
   }
-  # HA: two tasks across both AZs, one of them always on-demand (the rest
-  # may run on Spot), so one interruption or AZ loss never takes the service down.
-  min_capacity   = 2
-  desired_count  = 2
-  on_demand_base = 1
+  # HA: raise the autoscaling floor to two tasks, which ECS places across both
+  # AZs. Deliberately NOT setting on_demand_base here: capacity_provider_strategy
+  # is a replacement-forcing attribute on aws_ecs_service, so changing it would
+  # destroy and recreate a live service. Spot interruption is already covered by
+  # the two-task floor plus the deployment circuit breaker.
+  min_capacity = 2
 
   tags = local.common_tags
 }
@@ -411,11 +412,12 @@ module "admin_backend" {
 
     AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["azure-storage-account-key"]
   }
-  # HA: two tasks across both AZs, one of them always on-demand (the rest
-  # may run on Spot), so one interruption or AZ loss never takes the service down.
-  min_capacity   = 2
-  desired_count  = 2
-  on_demand_base = 1
+  # HA: raise the autoscaling floor to two tasks, which ECS places across both
+  # AZs. Deliberately NOT setting on_demand_base here: capacity_provider_strategy
+  # is a replacement-forcing attribute on aws_ecs_service, so changing it would
+  # destroy and recreate a live service. Spot interruption is already covered by
+  # the two-task floor plus the deployment circuit breaker.
+  min_capacity = 2
 
   tags = local.common_tags
 }
@@ -473,11 +475,12 @@ module "payment_service" {
   container_port = 5002
   max_capacity   = 2 # matches this service's HPA maxReplicas in gitops_homeease
 
-  # HA: two tasks across both AZs, one of them always on-demand (the rest
-  # may run on Spot), so one interruption or AZ loss never takes the service down.
-  min_capacity   = 2
-  desired_count  = 2
-  on_demand_base = 1
+  # HA: raise the autoscaling floor to two tasks, which ECS places across both
+  # AZs. Deliberately NOT setting on_demand_base here: capacity_provider_strategy
+  # is a replacement-forcing attribute on aws_ecs_service, so changing it would
+  # destroy and recreate a live service. Spot interruption is already covered by
+  # the two-task floor plus the deployment circuit breaker.
+  min_capacity = 2
 
   # Tightest ingress in the stack, on purpose — see the block comment
   # above "SERVICES".
