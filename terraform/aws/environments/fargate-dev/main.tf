@@ -68,6 +68,17 @@ data "aws_iam_policy_document" "alarms_topic" {
       values   = [data.aws_caller_identity.current.account_id]
     }
   }
+
+  # EventBridge delivers GuardDuty findings (security.tf) to the same topic.
+  statement {
+    effect    = "Allow"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.alarms.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+  }
 }
 
 resource "aws_sns_topic_policy" "alarms" {
@@ -354,6 +365,11 @@ module "backend" {
 
     AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.backend_secret_arns["azure-storage-account-key"]
   }
+  # HA: two tasks across both AZs, one of them always on-demand (the rest
+  # may run on Spot), so one interruption or AZ loss never takes the service down.
+  min_capacity   = 2
+  desired_count  = 2
+  on_demand_base = 1
 
   tags = local.common_tags
 }
@@ -395,6 +411,11 @@ module "admin_backend" {
 
     AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["azure-storage-account-key"]
   }
+  # HA: two tasks across both AZs, one of them always on-demand (the rest
+  # may run on Spot), so one interruption or AZ loss never takes the service down.
+  min_capacity   = 2
+  desired_count  = 2
+  on_demand_base = 1
 
   tags = local.common_tags
 }
@@ -451,6 +472,12 @@ module "payment_service" {
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/payment-service:${var.image_tags.payment_service}"
   container_port = 5002
   max_capacity   = 2 # matches this service's HPA maxReplicas in gitops_homeease
+
+  # HA: two tasks across both AZs, one of them always on-demand (the rest
+  # may run on Spot), so one interruption or AZ loss never takes the service down.
+  min_capacity   = 2
+  desired_count  = 2
+  on_demand_base = 1
 
   # Tightest ingress in the stack, on purpose — see the block comment
   # above "SERVICES".
