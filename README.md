@@ -24,29 +24,6 @@ flowchart TB
     BLOB --- ECS
 ```
 
-## Repository layout
-
-```
-terraform/
-  azure/
-    bootstrap/        Remote-state storage account (run once)
-    modules/          resource-group, networking, acr, aks, keyvault, monitoring,
-                      alerts, workload-identity, ci-identity
-    environments/     dev, dev-identity, staging, prod
-  aws/
-    bootstrap/        S3 bucket for Terraform state (run once)
-    modules/          networking, ecr, secrets, ci-oidc, tf-apply-role,
-                      ecs-cluster, ecs-service, alb
-    environments/     dev (foundation), fargate-dev (the running app), staging, prod
-    _reference-eks/   Kept for comparison: how the same app would run on EKS
-  persistent/
-    azure-storage/    Image storage, kept in its own stack on purpose
-pipelines/            Azure DevOps: plan, setup, drift detection, destroy
-azure-pipelines.yml   Main Terraform pipeline for Azure
-```
-
-Each environment composes the modules and keeps its own remote state. Staging and prod are defined and plan-only; they are not deployed.
-
 ## Azure
 
 `environments/dev` builds the resource group, network, container registry, AKS cluster, Key Vault, Log Analytics and one workload identity per app, so pods read secrets from Key Vault without any stored credentials. `dev-identity` holds the identities the CI pipelines use.
@@ -76,25 +53,3 @@ Design choices:
 - **Secrets are never in Terraform.** Terraform creates empty containers; values are set by hand in Secrets Manager, so they stay out of the state file.
 
 CI writes the new image tag into `terraform/aws/environments/fargate-dev/image-tags.auto.tfvars` after each successful build, so a release is `terraform apply` followed by a restart. AWS Terraform is applied by hand on purpose.
-
-### Day-to-day (AWS)
-
-```bash
-cd terraform/aws/environments/fargate-dev
-terraform apply                                   # deploys the tags CI committed
-```
-
-Stop the costly parts at night by destroying `fargate-dev` and the NAT gateway (the ALB, tasks and NAT are what bill by the hour); the VPC, ECR, secrets and the Elastic IP stay, so the Atlas allowlist remains valid. Bring it back with `terraform apply`, then restart the services that call the backend once it is up. Details and the AWS-specific setup are in `terraform/aws/environments/fargate-dev/README.md`.
-
-## Conventions
-
-- Terraform is pinned (`required_version`, provider versions, committed `.terraform.lock.hcl`).
-- Everything is tagged `project`, `environment`, `owner`, `managed_by`.
-- State is remote and locked: Azure Storage on Azure, S3 on AWS. Never commit state or `.tfvars` files that hold real values; commit `terraform.tfvars.example` instead.
-- Quality tooling: `.tflint.hcl`, `.checkov.yaml` and `.terraform-docs.yml` configure the linters and generated docs.
-
-## Known limits
-
-- One task per service and a single NAT gateway: a dev setup, not highly available.
-- The AWS load balancer serves plain HTTP; HTTPS needs a domain and a certificate (the ALB module already supports one).
-- The load balancer address changes if the ALB is destroyed and recreated.
