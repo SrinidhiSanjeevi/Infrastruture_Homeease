@@ -243,6 +243,19 @@ data "aws_iam_policy_document" "node_ecr" {
     ]
     resources = var.ecr_repository_arns
   }
+
+  # EKS system images (vpc-cni, kube-proxy, coredns, ebs-csi) live in AWS-owned ECR accounts;
+  # without this the nodes stay NotReady with 403 on every add-on image.
+  statement {
+    sid    = "PullEksSystemImages"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+    ]
+    resources = ["arn:aws:ecr:*:602401143452:repository/*"]
+  }
 }
 
 resource "aws_iam_role_policy" "node_ecr" {
