@@ -1,15 +1,4 @@
-# ============================================================
-# Public ALB — two listeners, one per public-facing service, same
-# port convention app_Homeease's docker-compose.yml already uses
-# (8080 for frontend, 8081 for admin-frontend) so "which port is
-# which app" stays one fact learned once, not re-learned per
-# environment.
-#
-# HTTPS is opt-in: set certificate_arn (an ACM certificate in the same
-# region, which needs a domain you control) and a 443 listener is
-# added for frontend with HTTP :80 redirecting to it. With no
-# certificate the ALB stays HTTP-only, a known dev limitation.
-# ============================================================
+# Public ALB — two listeners, one per public-facing service
 
 terraform {
   required_version = ">= 1.7.0"
@@ -71,9 +60,7 @@ resource "aws_lb" "this" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = var.public_subnet_ids
 
-  # Fine for a dev/demo environment — no compliance requirement to
-  # retain access logs here, and an S3 bucket + policy just to hold
-  # them is real added surface for no current consumer.
+  # Fine for a dev/demo environment
   enable_deletion_protection = false
 
   tags = var.tags
@@ -169,9 +156,7 @@ resource "aws_lb_listener" "admin_frontend" {
   }
 }
 
-# ============================================================
 # ALARMS — target health and 5xx per target group.
-# ============================================================
 
 locals {
   target_groups = {

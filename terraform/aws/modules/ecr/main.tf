@@ -1,12 +1,4 @@
-# ============================================================
 # ECR — one repository per service, path-namespaced to match ACR
-#
-#   ACR:  acrhomeeasedev.azurecr.io/homeease/backend:<sha>
-#   ECR:  <acct>.dkr.ecr.ap-south-1.amazonaws.com/homeease/backend:<sha>
-#
-# Same path, same tag, same digest content — so a manifest can switch
-# clouds by changing the registry host and nothing else.
-# ============================================================
 
 terraform {
   required_version = ">= 1.7.0"
@@ -26,16 +18,10 @@ resource "aws_ecr_repository" "this" {
 
   name = "${var.namespace}/${each.value}"
 
-  # THE important line. IMMUTABLE means ECR rejects a push to a tag
-  # that already exists. It is what turns "don't use :latest" from a
-  # convention people forget into something the registry enforces.
-  # It also guarantees that a tag seen in a manifest today resolves to
-  # the same bytes tomorrow — which is the whole basis of being able
-  # to roll back.
+  # IMMUTABLE: ECR rejects a push to an existing tag
   image_tag_mutability = "IMMUTABLE"
 
-  # Free. The enhanced (Inspector-backed) alternative is billed per
-  # image scanned and should stay off while you are on trial credit.
+  # Basic scanning is free; enhanced (Inspector) scanning is billed per image
   image_scanning_configuration {
     scan_on_push = true
   }
@@ -51,15 +37,7 @@ resource "aws_ecr_repository" "this" {
   })
 }
 
-# ============================================================
 # LIFECYCLE POLICY
-#
-# Free-tier storage protection. Without this, every CI run adds a
-# layer set that is never removed, and a monorepo with four services
-# building on every merge fills 500 MB in weeks.
-#
-# Rules evaluate in priority order, first match wins.
-# ============================================================
 
 resource "aws_ecr_lifecycle_policy" "this" {
   for_each = aws_ecr_repository.this
@@ -93,13 +71,7 @@ resource "aws_ecr_lifecycle_policy" "this" {
   })
 }
 
-# ============================================================
 # REPOSITORY POLICY
-#
-# Explicit allow for the EKS node role to pull. IRSA handles
-# application identity; image pulls happen before any pod exists, so
-# they use the NODE role, not a service account.
-# ============================================================
 
 resource "aws_ecr_repository_policy" "pull" {
   for_each = var.pull_principal_arns == null ? {} : aws_ecr_repository.this
@@ -125,14 +97,7 @@ resource "aws_ecr_repository_policy" "pull" {
   })
 }
 
-# ============================================================
 # REGISTRY-WIDE SCANNING
-#
-# Registry-level configuration, so it is set once rather than per
-# repository. BASIC is free and gives you a second opinion alongside
-# Trivy — they use different vulnerability sources and genuinely
-# disagree, which is the point of running both.
-# ============================================================
 
 resource "aws_ecr_registry_scanning_configuration" "this" {
   count = var.manage_registry_scanning ? 1 : 0

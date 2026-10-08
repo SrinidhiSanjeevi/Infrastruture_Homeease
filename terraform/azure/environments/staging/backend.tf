@@ -1,5 +1,4 @@
-# Remote state for staging. Same storage account and container as dev
-# (bootstrap output); only the key differs per environment.
+# Remote state for staging.
 
 terraform {
   backend "azurerm" {
@@ -8,9 +7,7 @@ terraform {
     container_name       = "tfstate"
     key                  = "staging.terraform.tfstate"
 
-    # Forces Entra token auth. Without it Terraform can silently fall
-    # back to shared storage account keys — a long-lived credential
-    # that defeats the OIDC setup used everywhere else.
+    # Forces Entra token auth.
     use_azuread_auth = true
   }
 }

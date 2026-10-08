@@ -22,9 +22,7 @@ variable "project_name" {
   type        = string
 }
 
-# ============================================================
 # AKS
-# ============================================================
 
 variable "kubernetes_version" {
   description = "AKS Kubernetes version. Null uses the Azure-supported default."
@@ -73,9 +71,7 @@ variable "dns_service_ip" {
   default     = "10.20.0.10"
 }
 
-# ============================================================
 # ACR
-# ============================================================
 
 variable "acr_sku" {
   description = "Azure Container Registry SKU."
@@ -97,9 +93,7 @@ variable "public_network_access_enabled" {
   default     = true
 }
 
-# ============================================================
 # NETWORKING
-# ============================================================
 
 variable "vnet_address_space" {
   description = "HomeEase VNet address space."
@@ -116,9 +110,7 @@ variable "private_endpoint_subnet_prefix" {
   type        = list(string)
 }
 
-# ============================================================
 # KEY VAULT
-# ============================================================
 
 
 
@@ -143,9 +135,7 @@ variable "keyvault_public_network_access_enabled" {
   default     = true
 }
 
-# ============================================================
 # WORKLOAD IDENTITY
-# ============================================================
 
 variable "kubernetes_namespace" {
   description = "Kubernetes namespace used by HomeEase."
@@ -163,9 +153,7 @@ variable "admin_object_id" {
   type        = string
 }
 
-# ============================================================
-# CI IDENTITY (see ci.tf) — Azure DevOps + GitHub Actions federation
-# ============================================================
+# CI IDENTITY (see ci.tf)
 
 variable "ado_organization_id" {
   description = <<-EOT
@@ -195,9 +183,7 @@ variable "tfstate_storage_account_id" {
   default     = null
 }
 
-# ============================================================
 # COST GUARDRAIL (see ci.tf)
-# ============================================================
 
 variable "monthly_budget_amount" {
   description = "Monthly budget in the billing currency for this environment's resource group."

@@ -1,17 +1,4 @@
-# ============================================================
-# CloudFront in front of the public ALB — HTTPS with no domain.
-#
-# ACM will not issue a certificate for *.elb.amazonaws.com, so without a domain the ALB can only
-# speak HTTP. Every CloudFront distribution gets a free <id>.cloudfront.net name that already
-# carries a trusted AWS-managed certificate:
-#
-#   browser --HTTPS--> CloudFront --HTTP--> ALB (:80 frontend / :8081 admin) --> Fargate
-#
-# Viewer traffic is encrypted and HTTP is redirected to HTTPS. The CloudFront -> ALB hop stays on
-# HTTP inside AWS (acceptable for dev; with a domain, use the ALB module's certificate_arn instead).
-# Caching is disabled and everything is forwarded, so login, bookings and /api behave exactly as
-# they do against the ALB directly.
-# ============================================================
+# CloudFront in front of the public ALB
 
 terraform {
   required_version = ">= 1.7.0"

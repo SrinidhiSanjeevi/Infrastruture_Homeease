@@ -13,9 +13,6 @@ terraform {
   }
 
   # The state account created below also stores this root's own state.
-  # One-time move from the old local file:
-  #   terraform init -migrate-state -force-copy
-  # Then keep the local bootstrap.tfstate* files only as a backup.
   backend "azurerm" {
     resource_group_name  = "tfstate-rg"
     storage_account_name = "tfstatehomeeaseayhiue"
@@ -29,9 +26,7 @@ provider "azurerm" {
   features {}
 }
 
-# ============================================================
 # Terraform Bootstrap Resource Group
-# ============================================================
 
 resource "azurerm_resource_group" "tfstate" {
   name     = var.resource_group_name
@@ -42,9 +37,7 @@ resource "azurerm_resource_group" "tfstate" {
   })
 }
 
-# ============================================================
 # Terraform State Storage Account
-# ============================================================
 
 resource "random_string" "storage_suffix" {
   length = 6
@@ -88,9 +81,7 @@ resource "azurerm_storage_account" "tfstate" {
   }
 }
 
-# ============================================================
 # Terraform State Container
-# ============================================================
 
 resource "azurerm_storage_container" "tfstate" {
   name                  = "tfstate"
@@ -98,7 +89,7 @@ resource "azurerm_storage_container" "tfstate" {
   container_access_type = "private"
 }
 
-# State data-plane access for the bootstrapping user (use_azuread_auth = true needs this, Owner/Contributor alone is not enough)
+# State data-plane access for the bootstrapping user
 
 data "azurerm_client_config" "current" {}
 
@@ -108,12 +99,7 @@ resource "azurerm_role_assignment" "tfstate_blob_contributor" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
-# ============================================================
 # Azure DevOps pipeline identity (service connection azure-homeease-dev)
-#
-# Lives HERE, not in an environment, so it survives a dev destroy/re-apply:
-# the pipeline needs these roles to rebuild dev in the first place.
-# ============================================================
 
 # Read/write Terraform state (backend uses use_azuread_auth = true).
 resource "azurerm_role_assignment" "pipeline_tfstate" {
@@ -124,10 +110,6 @@ resource "azurerm_role_assignment" "pipeline_tfstate" {
 }
 
 # The stack creates role assignments (AcrPull, AcrPush, Key Vault roles).
-# Role Based Access Control Administrator, restricted by an ABAC condition so
-# the pipeline can assign ONLY those roles and can never hand out Owner or
-# User Access Administrator. Subscription scope because the resource groups it
-# works in are created and destroyed by the pipeline itself.
 locals {
   pipeline_delegable_roles = join(", ", [
     "7f951dda-4ed3-4680-a7ca-43fe172d538d", # AcrPull
@@ -169,8 +151,7 @@ resource "azurerm_role_assignment" "pipeline_rbac_admin" {
   EOT
 }
 
-# Policy assignments (e.g. the required-tags policy in environments/dev) are
-# not covered by Contributor. This role is limited to policy objects only.
+# Policy assignments (e.g. the required-tags policy in environments/dev) are not covered by Contributor.
 resource "azurerm_role_assignment" "pipeline_policy" {
   scope                = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
   role_definition_name = "Resource Policy Contributor"
@@ -178,13 +159,7 @@ resource "azurerm_role_assignment" "pipeline_policy" {
   principal_type       = "ServicePrincipal"
 }
 
-# ============================================================
 # Read-only PLAN identity (service connection azure-homeease-plan)
-#
-# plan jobs can read everything and the state, but cannot change Azure.
-# Only the apply identity above has write access. Optional: created once
-# plan_principal_object_id is set.
-# ============================================================
 
 resource "azurerm_role_assignment" "plan_reader" {
   count = var.plan_principal_object_id == null ? 0 : 1

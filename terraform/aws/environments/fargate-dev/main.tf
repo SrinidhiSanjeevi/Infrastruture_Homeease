@@ -1,20 +1,4 @@
-# ============================================================
-# AWS — ECS Fargate, the LIVE compute path for this cloud (see
-# terraform/aws/_reference-eks/README.md for the EKS path this
-# replaced and its cost reasoning).
-#
-# Builds entirely on environments/dev's outputs (VPC, ECR, Secrets
-# Manager containers) via terraform_remote_state — this file creates
-# NO networking, NO ECR repos, and NO GitHub OIDC provider of its own.
-#
-# Rough monthly cost at the default sizing (5 services, min 1 / max
-# 2-3 tasks each, 256 CPU / 512 MiB, mostly Fargate Spot): compute
-# ~$10-15, ALB ~$16-20 (flat hourly charge + LCU usage), CloudWatch
-# Logs a few dollars — roughly $40-60/month all in, NOT counting
-# environments/dev's own VPC/NAT cost (~$32/month, already paid for
-# regardless of which compute path is live). No EKS control plane fee
-# exists in this path at all.
-# ============================================================
+# AWS — ECS Fargate, the LIVE compute path for this cloud
 
 locals {
   common_tags = {
@@ -39,14 +23,9 @@ data "terraform_remote_state" "registry" {
   }
 }
 
-# ============================================================
 # CLUSTER
-# ============================================================
 
-# Alarm topic. No email subscription for now, so alarms are visible in
-# the CloudWatch console only. To get emails later, add an
-# aws_sns_topic_subscription (protocol "email") on this topic and
-# confirm the link AWS sends.
+# Alarm topic. No email subscription for now, so alarms are visible in the CloudWatch console only.
 resource "aws_sns_topic" "alarms" {
   name = "${local.resource_prefix}-alarms"
   tags = local.common_tags
@@ -97,11 +76,7 @@ module "ecs_cluster" {
   tags = local.common_tags
 }
 
-# ============================================================
-# LOAD BALANCER — public entry point for frontend + admin-frontend
-# only, matching charts/frontend and charts/admin-frontend being the
-# only two services with an Ingress in gitops_homeease.
-# ============================================================
+# LOAD BALANCER — public entry point for frontend + admin-frontend only
 
 module "alb" {
   source = "../../modules/alb"
@@ -115,7 +90,7 @@ module "alb" {
   tags = local.common_tags
 }
 
-# HTTPS without a domain: CloudFront's free *.cloudfront.net name and certificate in front of the ALB.
+# HTTPS without a domain
 module "cloudfront" {
   source = "../../modules/cloudfront"
 
@@ -125,15 +100,7 @@ module "cloudfront" {
   tags = local.common_tags
 }
 
-# ============================================================
-# TASK EXECUTION ROLES — three, not one, mirroring the exact same
-# split already made twice on the other two clouds (Azure Workload
-# Identity, AWS IRSA in _reference-eks): payment-service gets its own
-# role because it is the one place a mistake has a real financial
-# consequence. frontend/admin-frontend get a role with NO secrets
-# access at all — they read none, matching "frontend needs neither"
-# in gitops_homeease's README.
-# ============================================================
+# TASK EXECUTION ROLES — three, not one
 
 data "aws_iam_policy_document" "ecs_tasks_assume" {
   statement {
@@ -146,7 +113,7 @@ data "aws_iam_policy_document" "ecs_tasks_assume" {
   }
 }
 
-# ---- web (frontend, admin-frontend): no secrets ----
+# web (frontend, admin-frontend)
 
 resource "aws_iam_role" "exec_web" {
   name               = "${local.resource_prefix}-exec-web"
@@ -159,7 +126,7 @@ resource "aws_iam_role_policy_attachment" "exec_web" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# ---- backend (backend, admin-backend): their own secrets ----
+# backend (backend, admin-backend)
 
 resource "aws_iam_role" "exec_backend" {
   name               = "${local.resource_prefix}-exec-backend"
@@ -189,7 +156,7 @@ resource "aws_iam_role_policy" "exec_backend_secrets" {
   policy = data.aws_iam_policy_document.exec_backend_secrets.json
 }
 
-# ---- notification (notification-service only): mongo + email secrets ----
+# notification (notification-service only)
 
 resource "aws_iam_role" "exec_notification" {
   name               = "${local.resource_prefix}-exec-notification"
@@ -216,7 +183,7 @@ resource "aws_iam_role_policy" "exec_notification_secrets" {
   policy = data.aws_iam_policy_document.exec_notification_secrets.json
 }
 
-# ---- payment (payment-service only): own role, own blast radius ----
+# payment (payment-service only)
 
 resource "aws_iam_role" "exec_payment" {
   name               = "${local.resource_prefix}-exec-payment"
@@ -243,21 +210,7 @@ resource "aws_iam_role_policy" "exec_payment_secrets" {
   policy = data.aws_iam_policy_document.exec_payment_secrets.json
 }
 
-# ============================================================
 # SERVICES
-#
-# Ingress shape mirrors each service's charts/<service>/templates/
-# networkpolicy.yaml exactly:
-#   frontend, admin-frontend  — public, via the ALB
-#   backend                   — internal, reachable from frontend +
-#                                admin-frontend (both proxy /api/ to it)
-#   admin-backend              — internal, reachable from admin-frontend
-#                                only
-#   payment-service            — internal, reachable from backend only
-#                                (tightest — its NetworkPolicy is the
-#                                one place this project scopes ingress
-#                                to a single named peer, not "any pod")
-# ============================================================
 
 module "frontend" {
   source = "../../modules/ecs-service"
@@ -321,10 +274,7 @@ module "backend" {
   image          = "${data.terraform_remote_state.registry.outputs.registry_url}/homeease/backend:${var.image_tags.backend}"
   container_port = 5000
 
-  # Callers of the booking backend: the two web frontends (proxied
-  # /api/), and the three services that call its internal API
-  # (admin-backend auth + data, payment-service booking updates,
-  # notification-service booking lookups).
+  # Callers of the booking backend: both frontends and the three internal services
   allowed_source_security_group_ids = {
     frontend             = module.frontend.security_group_id
     admin_frontend       = module.admin_frontend.security_group_id
@@ -338,22 +288,18 @@ module "backend" {
     PORT                     = "5000"
     PAYMENT_SERVICE_URL      = "http://payment-service:5002"
     NOTIFICATION_SERVICE_URL = "http://notification-service:5003"
-    # No Prometheus on AWS: publish the DB-truth business numbers to
-    # CloudWatch (Embedded Metric Format) from the metrics collector.
+    # No Prometheus on AWS: publish business metrics to CloudWatch via EMF
     CLOUDWATCH_EMF_ENABLED = "true"
-    # ALB + frontend nginx + Service Connect sidecar sit in front of the
-    # backend; without this every client looks like 127.0.0.1 and all
-    # users share one rate-limit bucket.
+    # ALB + frontend nginx + Service Connect sidecar sit in front of the backend
     TRUST_PROXY_HOPS = "2"
-    # Demo: people on one wifi share a public IP, so the defaults (10 sign-ins / 200 calls per 15 min) lock them out.
+    # Demo: shared wifi IPs hit the default rate limits
     RATE_LIMIT_AUTH_MAX       = "300"
     RATE_LIMIT_GENERAL_MAX    = "5000"
     RATE_LIMIT_PAYMENT_MAX    = "200"
     RATE_LIMIT_EMERGENCY_MAX  = "200"
     ALLOWED_ORIGINS           = var.allowed_origins
     METRICS_COLLECTOR_ENABLED = "true"
-    # Images live in Azure Blob (persistent/azure-storage); the app
-    # signs short-lived read URLs with the account key below.
+    # Images live in Azure Blob (persistent/azure-storage)
     AZURE_STORAGE_ACCOUNT_NAME = var.azure_storage_account_name
   }
 
@@ -365,11 +311,7 @@ module "backend" {
 
     AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.backend_secret_arns["azure-storage-account-key"]
   }
-  # HA: raise the autoscaling floor to two tasks, which ECS places across both
-  # AZs. Deliberately NOT setting on_demand_base here: capacity_provider_strategy
-  # is a replacement-forcing attribute on aws_ecs_service, so changing it would
-  # destroy and recreate a live service. Spot interruption is already covered by
-  # the two-task floor plus the deployment circuit breaker.
+  # HA: raise the autoscaling floor to two tasks, which ECS places across both AZs.
   min_capacity = 2
 
   tags = local.common_tags
@@ -398,8 +340,7 @@ module "admin_backend" {
     PORT            = "5001"
     ALLOWED_ORIGINS = var.allowed_origins
 
-    # Admin reads bookings/users through the booking service (defaults
-    # to 127.0.0.1:5000, which is only right on a single host).
+    # Admin reads bookings/users through the booking service
     BOOKING_SERVICE_URL = "http://backend:5000"
     TRUST_PROXY_HOPS    = "2"
 
@@ -412,11 +353,7 @@ module "admin_backend" {
 
     AZURE_STORAGE_ACCOUNT_KEY = data.terraform_remote_state.registry.outputs.admin_backend_secret_arns["azure-storage-account-key"]
   }
-  # HA: raise the autoscaling floor to two tasks, which ECS places across both
-  # AZs. Deliberately NOT setting on_demand_base here: capacity_provider_strategy
-  # is a replacement-forcing attribute on aws_ecs_service, so changing it would
-  # destroy and recreate a live service. Spot interruption is already covered by
-  # the two-task floor plus the deployment circuit breaker.
+  # HA: raise the autoscaling floor to two tasks, which ECS places across both AZs.
   min_capacity = 2
 
   tags = local.common_tags
@@ -475,15 +412,10 @@ module "payment_service" {
   container_port = 5002
   max_capacity   = 2 # matches this service's HPA maxReplicas in gitops_homeease
 
-  # HA: raise the autoscaling floor to two tasks, which ECS places across both
-  # AZs. Deliberately NOT setting on_demand_base here: capacity_provider_strategy
-  # is a replacement-forcing attribute on aws_ecs_service, so changing it would
-  # destroy and recreate a live service. Spot interruption is already covered by
-  # the two-task floor plus the deployment circuit breaker.
+  # HA: raise the autoscaling floor to two tasks, which ECS places across both AZs.
   min_capacity = 2
 
-  # Tightest ingress in the stack, on purpose — see the block comment
-  # above "SERVICES".
+  # Tightest ingress in the stack, on purpose
   allowed_source_security_group_ids = { backend = module.backend.security_group_id }
 
   environment_variables = {
@@ -507,24 +439,13 @@ module "payment_service" {
   tags = local.common_tags
 }
 
-# ============================================================
-# TERRAFORM-APPLY IDENTITY — this stack's own, via the shared
-# tf-apply-role module (same one staging/prod already use). Extra
-# ECS/ALB/autoscaling/networking permissions on top of the module's
-# Budgets + ECRReadOnly baseline.
-# ============================================================
+# TERRAFORM-APPLY IDENTITY — this stack's own, via the shared tf-apply-role module
 
 data "aws_iam_policy_document" "tf_apply_extra" {
   statement {
     sid    = "ECS"
     effect = "Allow"
-    # ECS's create/describe/update APIs are not ARN-scopable the way
-    # S3 or ECR are — AWS's own managed policies for ECS use
-    # Resource:"*" for exactly this reason. Scoped by IAM action set
-    # instead: only what this stack's resources need, nothing
-    # account-wide like ecs:DeleteCluster on clusters this stack
-    # doesn't own (there's only ever one, but the action list itself
-    # is the real boundary here, not a resource ARN).
+    # ECS's create/describe/update APIs are not ARN-scopable the way S3 or ECR are
     actions = [
       "ecs:CreateCluster", "ecs:DeleteCluster", "ecs:DescribeClusters",
       "ecs:PutClusterCapacityProviders",
@@ -604,9 +525,7 @@ data "aws_iam_policy_document" "tf_apply_extra" {
     resources = ["*"]
   }
 
-  # Security groups this stack's ecs-service/alb modules create. Not
-  # scoped to specific group IDs — they don't exist until this policy
-  # already needs to allow creating them.
+  # Security groups this stack's ecs-service/alb modules create.
   statement {
     sid    = "SecurityGroups"
     effect = "Allow"
@@ -619,10 +538,7 @@ data "aws_iam_policy_document" "tf_apply_extra" {
     resources = ["*"]
   }
 
-  # The three execution roles this stack owns, and PassRole so ECS can
-  # actually hand them to a running task — scoped by name prefix, same
-  # discipline dev/main.tf's own tf_apply policy already uses for its
-  # IAM statement.
+  # The stack's three execution roles, plus PassRole for ECS
   statement {
     sid    = "ExecutionRoles"
     effect = "Allow"
@@ -635,9 +551,7 @@ data "aws_iam_policy_document" "tf_apply_extra" {
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.resource_prefix}-exec-*"]
   }
 
-  # Read-only access to environments/dev's Secrets Manager containers,
-  # needed only to resolve the data sources this file itself declares
-  # — never a write action.
+  # Read-only access to environments/dev's Secrets Manager containers
   statement {
     sid    = "SecretsRead"
     effect = "Allow"
@@ -666,10 +580,7 @@ module "tf_apply_role" {
   tags = local.common_tags
 }
 
-# ============================================================
-# COST GUARDRAIL — this stack's own budget, on top of
-# environments/dev's. See this file's header comment for the estimate.
-# ============================================================
+# COST GUARDRAIL — this stack's own budget, on top of environments/dev's.
 
 resource "aws_budgets_budget" "monthly" {
   name         = "${local.resource_prefix}-fargate-monthly"

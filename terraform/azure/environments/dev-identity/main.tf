@@ -1,10 +1,4 @@
-# ============================================================
 # dev CI identity: its OWN root, applied manually (like bootstrap).
-#
-# It creates a Microsoft Entra ID app registration, which needs directory
-# permissions. The Azure DevOps pipeline deliberately has none, so this must
-# not live in environments/dev, which the pipeline plans and applies.
-# ============================================================
 
 data "azurerm_resource_group" "this" {
   name = "rg-${var.project_name}-${var.environment}"

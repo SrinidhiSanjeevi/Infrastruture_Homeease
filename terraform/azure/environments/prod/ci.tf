@@ -40,9 +40,7 @@ output "ci_tenant_id" {
   value = module.ci_identity.tenant_id
 }
 
-# ============================================================
 # COST GUARDRAIL
-# ============================================================
 
 resource "azurerm_consumption_budget_resource_group" "homeease" {
   name              = "budget-homeease-${var.environment}"

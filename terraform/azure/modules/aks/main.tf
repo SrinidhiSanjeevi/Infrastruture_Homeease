@@ -25,13 +25,10 @@ resource "azurerm_kubernetes_cluster" "this" {
   # Built-in Azure Policy add-on (pod security baselines via Gatekeeper).
   azure_policy_enabled = true
 
-  # true = the shared static admin kubeconfig is disabled; requires
-  # admin_group_object_ids so people sign in with Entra ID instead.
+  # true = the shared static admin kubeconfig is disabled
   local_account_disabled = var.local_account_disabled
 
-  # ==========================================================
   # AKS SYSTEM NODE POOL
-  # ==========================================================
 
   default_node_pool {
     name                        = "default"
@@ -50,9 +47,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
-  # ==========================================================
   # AKS NETWORKING
-  # ==========================================================
 
   network_profile {
     network_plugin      = "azure"
@@ -85,8 +80,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
-  # Container Insights (metrics + container logs). Separate switch: on a small cluster it costs
-  # ~500m CPU of requests and duplicates the Prometheus/Loki stack.
+  # Container Insights (metrics + container logs).
   dynamic "oms_agent" {
     for_each = var.enable_container_insights ? [1] : []
     content {
@@ -95,9 +89,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
-  # ==========================================================
   # KEY VAULT CSI DRIVER
-  # ==========================================================
 
   key_vault_secrets_provider {
     secret_rotation_enabled  = var.secret_rotation_enabled
@@ -107,9 +99,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   tags = var.tags
 }
 
-# ============================================================
 # AKS -> ACR Pull Permission
-# ============================================================
 
 resource "azurerm_role_assignment" "aks_acr_pull" {
   scope                = var.acr_id

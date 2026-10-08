@@ -1,6 +1,4 @@
-# ============================================================
 # RESOURCE GROUP
-# ============================================================
 
 module "resource_group" {
   source = "../../modules/resource-group"
@@ -11,9 +9,7 @@ module "resource_group" {
   tags = local.common_tags
 }
 
-# ============================================================
 # MONITORING (audit logs for ACR / Key Vault / AKS)
-# ============================================================
 
 module "monitoring" {
   source = "../../modules/monitoring"
@@ -25,9 +21,7 @@ module "monitoring" {
   tags = local.common_tags
 }
 
-# ============================================================
 # NETWORKING
-# ============================================================
 
 module "networking" {
   source = "../../modules/networking"
@@ -43,9 +37,7 @@ module "networking" {
   tags = local.common_tags
 }
 
-# ============================================================
 # AZURE CONTAINER REGISTRY
-# ============================================================
 
 module "acr" {
   source = "../../modules/acr"
@@ -65,9 +57,7 @@ module "acr" {
   tags = local.common_tags
 }
 
-# Identities allowed to push images: the service principal behind the Azure DevOps service
-# connection `acr-homeease-wif-new` used by the Docker@2 login/push steps. Without AcrPush the
-# login fails with "CouldNotFetchAccessForMSIDueToACRNotConfiguredProperly 401 Unauthorized".
+# Identities allowed to push images
 resource "azurerm_role_assignment" "acr_push" {
   for_each = toset(var.acr_push_principal_ids)
 
@@ -79,9 +69,7 @@ resource "azurerm_role_assignment" "acr_push" {
   description = "Allows the Azure DevOps pipeline to push images to the registry."
 }
 
-# ============================================================
 # AKS
-# ============================================================
 
 module "aks" {
   source = "../../modules/aks"
@@ -111,8 +99,7 @@ module "aks" {
   local_account_disabled          = var.aks_local_account_disabled
   api_server_authorized_ip_ranges = var.api_server_authorized_ip_ranges
 
-  # Subscription quota is 4 regional vCPUs (2 x D2s_v5, cannot scale out): drop the add-ons that
-  # duplicate Prometheus/Loki or only free disk, so the workloads schedule.
+  # Subscription quota is 4 regional vCPUs (2 x D2s_v5, cannot scale out)
   enable_container_insights = false
   image_cleaner_enabled     = false
 
@@ -123,9 +110,7 @@ module "aks" {
   tags = local.common_tags
 }
 
-# ============================================================
 # KEY VAULT
-# ============================================================
 
 module "keyvault" {
   source = "../../modules/keyvault"
@@ -253,9 +238,7 @@ module "workload_identity_notification" {
   tags = local.common_tags
 }
 
-# ============================================================
 # ALERTS (AKS CPU / memory -> e-mail)
-# ============================================================
 
 module "alerts" {
   source = "../../modules/alerts"
@@ -268,9 +251,7 @@ module "alerts" {
   tags = local.common_tags
 }
 
-# ============================================================
 # COMMON TAGS
-# ============================================================
 
 locals {
   common_tags = {

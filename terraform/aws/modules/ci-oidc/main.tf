@@ -1,20 +1,4 @@
-# ============================================================
 # GITHUB ACTIONS → AWS, VIA OIDC
-#
-# No IAM user. No access key ID. No secret access key. If you ever
-# find yourself creating an aws_iam_access_key for CI, stop — this
-# module is the reason you don't have to.
-#
-# The flow:
-#   1. The workflow requests an OIDC token from GitHub (needs
-#      `permissions: id-token: write`).
-#   2. It calls sts:AssumeRoleWithWebIdentity presenting that token.
-#   3. STS validates the signature against the OIDC provider below,
-#      then checks the trust policy conditions.
-#   4. It returns credentials valid for one hour.
-#
-# EVERYTHING depends on step 3 being written correctly.
-# ============================================================
 
 terraform {
   required_version = ">= 1.7.0"
@@ -28,18 +12,7 @@ terraform {
 
 data "aws_caller_identity" "current" {}
 
-# ============================================================
 # OIDC PROVIDER
-#
-# Account-wide singleton. If another stack in this account already
-# created it, set create_oidc_provider = false and pass the ARN in —
-# a duplicate provider for the same URL is an error.
-#
-# thumbprint_list: AWS stopped requiring thumbprint validation for
-# this provider in 2023 and now uses its own trust store, but the
-# API still accepts the field. Kept for compatibility; do not treat
-# it as a security control.
-# ============================================================
 
 resource "aws_iam_openid_connect_provider" "github" {
   count = var.create_oidc_provider ? 1 : 0
@@ -55,26 +28,6 @@ locals {
   oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : var.existing_oidc_provider_arn
 
   # These are the subjects allowed to assume the PUSH role.
-  #
-  # What NOT to write:
-  #   "repo:owner/repo:*"
-  #
-  # That wildcard trusts every branch, every tag, and every
-  # pull_request context in the repository. A contributor who opens a
-  # PR from a fork can then run a workflow that assumes your push
-  # role. It is the most common OIDC misconfiguration and it is a full
-  # registry compromise.
-  #
-  # Instead: pin refs explicitly, and use GitHub Environment subjects
-  # (`environment:prod`) for anything privileged, because Environments
-  # can require human approval before the token is minted at all.
-  # Two patterns per entry: GitHub's classic "repo:owner/repo:..." sub
-  # claim, and the immutable-ID form it now also issues —
-  # "repo:owner@<owner-id>/repo@<repo-id>:..." — added so a stale
-  # sub claim can't be replayed after a rename/transfer. The "@*"
-  # requires a literal "@" right after the exact owner/repo name
-  # (GitHub logins can never contain "@"), so this can't be widened
-  # into a prefix match against some other, similarly-named owner.
   push_subjects = concat(
     flatten([for b in var.allowed_branches : [
       "repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/${b}",
@@ -91,9 +44,7 @@ locals {
   )
 }
 
-# ============================================================
 # PUSH ROLE — main branch only
-# ============================================================
 
 data "aws_iam_policy_document" "push_assume" {
   statement {
@@ -105,15 +56,14 @@ data "aws_iam_policy_document" "push_assume" {
       identifiers = [local.oidc_provider_arn]
     }
 
-    # Audience must match exactly. StringEquals, never StringLike.
+    # Audience must match exactly.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
 
-    # Subject may need a wildcard for tag refs, hence StringLike —
-    # but the values are explicit prefixes, not a bare "*".
+    # Subject may need a wildcard for tag refs, hence StringLike
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
@@ -132,9 +82,7 @@ resource "aws_iam_role" "push" {
 }
 
 data "aws_iam_policy_document" "push" {
-  # GetAuthorizationToken cannot be scoped to a resource — the API
-  # returns a token for the whole registry and AWS models it as "*".
-  # This is expected, not a mistake in the policy.
+  # GetAuthorizationToken cannot be scoped to a resource
   statement {
     sid       = "ECRAuth"
     effect    = "Allow"
@@ -142,8 +90,7 @@ data "aws_iam_policy_document" "push" {
     resources = ["*"]
   }
 
-  # Everything that CAN be scoped, IS scoped — to the exact repository
-  # ARNs created by the ecr module, not to ecr:*.
+  # Everything that CAN be scoped, IS scoped
   statement {
     sid    = "ECRPush"
     effect = "Allow"
@@ -168,14 +115,7 @@ resource "aws_iam_role_policy" "push" {
   policy = data.aws_iam_policy_document.push.json
 }
 
-# ============================================================
 # READ ROLE — pull requests
-#
-# A PR from a fork runs untrusted code. It gets a role that can read
-# scan findings and describe images, and nothing else. This is why
-# the two roles are separate rather than one role with a branch
-# condition: separation is structural, not conditional.
-# ============================================================
 
 data "aws_iam_policy_document" "read_assume" {
   count = var.create_read_role ? 1 : 0
@@ -195,8 +135,7 @@ data "aws_iam_policy_document" "read_assume" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # StringLike, not StringEquals — same immutable-ID sub-claim
-    # reasoning as push_subjects above.
+    # StringLike, not StringEquals (same reasoning as push_subjects)
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
@@ -248,14 +187,7 @@ resource "aws_iam_role_policy" "read" {
   policy = data.aws_iam_policy_document.read[0].json
 }
 
-# ============================================================
-# SECRETS — reference, never create
-#
-# The secret VALUE is set out of band (console or CLI). Terraform
-# manages the container and the access grant only. Putting a real
-# secret in a Terraform resource writes it to state in plaintext,
-# and state is a file that gets copied around.
-# ============================================================
+# SECRETS — reference, never create; values are set out of band
 
 data "aws_secretsmanager_secret" "ci" {
   for_each = toset(var.ci_secret_names)

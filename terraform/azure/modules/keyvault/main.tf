@@ -7,9 +7,7 @@ resource "azurerm_key_vault" "this" {
 
   sku_name = var.sku_name
 
-  # ==========================================================
   # Security
-  # ==========================================================
 
   rbac_authorization_enabled = true
 

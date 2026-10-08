@@ -1,19 +1,4 @@
-# ============================================================
-# TERRAFORM-APPLY ROLE — for staging/prod, via the SAME GitHub OIDC
-# provider dev's ci-oidc module already created.
-#
-# Not the same thing as ci-oidc's push role. That role lets the APP
-# repo's workflow push images. This role lets the INFRA repo's
-# workflow run `terraform plan`/`apply` against THIS environment's
-# AWS resources — which today is just a budget, because CI never
-# builds an image for staging or prod (see ANALYSIS.md §3: one
-# digest, promoted, not rebuilt per environment).
-#
-# The OIDC provider is an account-wide singleton; only one may exist
-# per URL. This module never creates it — it takes the ARN dev
-# already produced and registers one more trust relationship against
-# the same provider.
-# ============================================================
+# TERRAFORM-APPLY ROLE — for staging/prod
 
 terraform {
   required_version = ">= 1.10.0"
@@ -41,7 +26,7 @@ data "aws_iam_policy_document" "assume" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Same discipline as ci-oidc: explicit prefixes, never a bare "*".
+    # Same discipline as ci-oidc
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
@@ -61,8 +46,7 @@ resource "aws_iam_role" "this" {
   tags = var.tags
 }
 
-# Scoped to exactly what this environment manages today. Widen this
-# (never to "*") the day EKS/VPC are added for this environment.
+# Scoped to exactly what this environment manages today.
 data "aws_iam_policy_document" "permissions" {
   statement {
     sid    = "Budgets"
@@ -75,9 +59,7 @@ data "aws_iam_policy_document" "permissions" {
     resources = ["arn:aws:budgets::${var.account_id}:budget/*"]
   }
 
-  # Read-only visibility into the shared registry dev owns — useful
-  # once this environment's future EKS node role needs an ECR
-  # repository policy, without granting any push permission here.
+  # Read-only visibility into the shared registry dev owns
   statement {
     sid    = "ECRReadOnly"
     effect = "Allow"
@@ -96,13 +78,7 @@ resource "aws_iam_role_policy" "this" {
   policy = data.aws_iam_policy_document.permissions.json
 }
 
-# ============================================================
-# EXTRA PERMISSIONS — for an environment that manages more than
-# budgets + registry read (e.g. fargate-dev's ECS/ALB/autoscaling
-# resources). A second policy document rather than a parameter that
-# reshapes the one above, so every environment's baseline
-# (Budgets + ECRReadOnly) stays identical and reviewable in one place.
-# ============================================================
+# EXTRA PERMISSIONS — for an environment that manages more than budgets + registry read
 
 resource "aws_iam_role_policy" "extra" {
   count = var.extra_policy_json != null ? 1 : 0

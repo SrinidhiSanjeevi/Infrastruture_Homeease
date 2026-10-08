@@ -1,8 +1,4 @@
-# ============================================================
 # HomeEase VPC — mirrors terraform/azure/modules/networking's shape
-# (one network boundary, subnets split by role) using AWS's native
-# building blocks instead of a VNet/NSG.
-# ============================================================
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -30,12 +26,7 @@ resource "aws_internet_gateway" "this" {
   })
 }
 
-# ============================================================
-# PUBLIC SUBNETS — one per AZ. Only thing that lives here is the
-# ingress-nginx Service's Network Load Balancer (tagged below so the
-# AWS Load Balancer / VPC CNI machinery can discover it automatically)
-# and the single NAT Gateway. EKS nodes are NOT here.
-# ============================================================
+# PUBLIC SUBNETS — one per AZ.
 
 resource "aws_subnet" "public" {
   for_each = { for idx, cidr in var.public_subnet_cidrs : local.azs[idx] => cidr }
@@ -52,10 +43,7 @@ resource "aws_subnet" "public" {
   })
 }
 
-# ============================================================
-# PRIVATE SUBNETS — EKS worker nodes live here, with no public IP and
-# no direct route to the internet except through the NAT Gateway.
-# ============================================================
+# PRIVATE SUBNETS — EKS worker nodes live here
 
 resource "aws_subnet" "private" {
   for_each = { for idx, cidr in var.private_subnet_cidrs : local.azs[idx] => cidr }
@@ -71,19 +59,7 @@ resource "aws_subnet" "private" {
   })
 }
 
-# ============================================================
 # NAT GATEWAY — deliberately ONE, not one per AZ.
-#
-# A NAT Gateway per AZ (the normal production recommendation, so a
-# single AZ outage doesn't take every private subnet's egress with
-# it) is ~$32/month EACH. This is a dev environment mirroring a
-# single-region AKS cluster that has the same single-NAT-equivalent
-# blast radius (Azure's outbound_type = loadBalancer routes through
-# one Standard Load Balancer, not one per zone). One NAT Gateway here
-# matches that cost/resilience trade-off instead of silently paying
-# 2x for redundancy nothing else in this stack has yet. Revisit this
-# specifically (not the rest of the module) for a real prod stack.
-# ============================================================
 
 resource "aws_eip" "nat" {
   domain = "vpc"
@@ -104,9 +80,7 @@ resource "aws_nat_gateway" "this" {
   depends_on = [aws_internet_gateway.this]
 }
 
-# ============================================================
 # ROUTING
-# ============================================================
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id

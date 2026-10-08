@@ -1,14 +1,4 @@
-# ============================================================
 # OPT-IN: role for decommissioning the Fargate stack from GitHub Actions.
-#
-# Why it exists: environments/fargate-dev's own apply role is destroyed WITH that stack (and has no S3
-# state permission), so it cannot be the identity that destroys it. A destroy needs delete rights across
-# ECS, ALB, CloudFront, CloudWatch, SNS, IAM, which is broad by nature.
-#
-# Why it is off by default: PowerUserAccess is account-wide. Turn it on for the teardown window only,
-# run .github/workflows/aws-fargate-destroy.yml, then set create_fargate_teardown_role = false and apply.
-# Trust is limited to this repository's main branch through GitHub OIDC; no long-lived key exists.
-# ============================================================
 
 data "aws_iam_policy_document" "teardown_assume" {
   count = var.create_fargate_teardown_role ? 1 : 0

@@ -1,12 +1,4 @@
-# ============================================================
-# AUDIT + THREAT DETECTION — purely additive. Nothing here sits in the
-# request path of the running app: CloudTrail only records API calls and
-# GuardDuty only reads existing logs, so neither can change app behaviour.
-#
-# NOTE: the CI apply role (module.tf_apply_role) needs cloudtrail, guardduty,
-# events and S3 permissions before CI can apply this file. Grant them
-# deliberately in tf_apply_extra, scoped as tightly as you are comfortable with.
-# ============================================================
+# AUDIT + THREAT DETECTION
 
 resource "aws_s3_bucket" "audit_logs" {
   bucket = "${local.resource_prefix}-audit-logs-${data.aws_caller_identity.current.account_id}"
@@ -103,8 +95,7 @@ resource "aws_cloudtrail" "this" {
   depends_on = [aws_s3_bucket_policy.audit_logs]
 }
 
-# GuardDuty: threat detection on CloudTrail, VPC flow and DNS logs. Findings
-# go to the existing alarms topic through EventBridge (medium severity and up).
+# GuardDuty: threat detection on CloudTrail, VPC flow and DNS logs.
 resource "aws_guardduty_detector" "this" {
   enable = true
   tags   = local.common_tags

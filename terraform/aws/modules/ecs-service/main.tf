@@ -1,15 +1,4 @@
-# ============================================================
-# One Fargate service — task definition, service, own security group,
-# own CloudWatch log group, own autoscaling target. Instantiated once
-# per HomeEase service in environments/fargate-dev/main.tf, the same
-# way charts/<service>/ is one Helm chart per service in gitops_homeease.
-#
-# The container health check is declared in the task definition below.
-# ECS ignores the Dockerfile HEALTHCHECK instruction (only docker and
-# docker-compose read it), so without this block the container status
-# stays UNKNOWN and a hung process is never replaced. It runs the same
-# wget probe the Dockerfiles use.
-# ============================================================
+# One Fargate service — task definition, service, own security group, own CloudWatch log group
 
 terraform {
   required_version = ">= 1.7.0"
@@ -21,15 +10,7 @@ terraform {
   }
 }
 
-# ============================================================
-# SECURITY GROUP — mirrors the exact allow-list each
-# charts/<service>/templates/networkpolicy.yaml already encodes:
-# ingress from specific named sources only, no default-allow. Egress
-# stays unrestricted, same reasoning as every NetworkPolicy's own
-# "No egress block" comment (Mongo, payment-service, Razorpay, and for
-# public services, nothing egress-restricted can reach that isn't
-# already an outbound call the app makes today).
-# ============================================================
+# SECURITY GROUP — mirrors the exact allow-list each charts/<service>/templates/networkpolicy.yaml already encodes
 
 resource "aws_security_group" "this" {
   name_prefix = "homeease-${var.environment}-${var.name}-"
@@ -51,13 +32,7 @@ resource "aws_security_group" "this" {
 }
 
 resource "aws_security_group_rule" "from_alb" {
-  # A count keyed on "var.alb_security_group_id != null" looks
-  # equivalent but isn't: for frontend/admin-frontend that value is
-  # module.alb.security_group_id, unknown until apply (the ALB is
-  # created in this same apply) — Terraform can't resolve a count from
-  # an unknown value even though it can never actually be null for
-  # those two callers. attach_alb is a literal bool in the caller's
-  # config instead, so it's always known at plan time.
+  # Static bool, not "!= null": the ALB SG ID is unknown until apply
   count = var.attach_alb ? 1 : 0
 
   type                     = "ingress"
@@ -78,14 +53,11 @@ resource "aws_security_group_rule" "from_peers" {
   from_port                = var.container_port
   to_port                  = var.container_port
   protocol                 = "tcp"
-  # ">" isn't in EC2's allowed description character set
-  # (^[0-9A-Za-z_ .:/()#,@\[\]+=&;{}!$*-]*$), so "->" is spelled out.
+  # ">" is not allowed in EC2 descriptions, so "->" is spelled out
   description = "${each.key} to ${var.name}"
 }
 
-# ============================================================
 # LOGGING
-# ============================================================
 
 resource "aws_cloudwatch_log_group" "this" {
   name              = "/ecs/homeease-${var.environment}/${var.name}"
@@ -94,9 +66,7 @@ resource "aws_cloudwatch_log_group" "this" {
   tags = var.tags
 }
 
-# ============================================================
 # TASK DEFINITION
-# ============================================================
 
 resource "aws_ecs_task_definition" "this" {
   family                   = "homeease-${var.environment}-${var.name}"
@@ -152,9 +122,7 @@ resource "aws_ecs_task_definition" "this" {
 
 data "aws_region" "current" {}
 
-# ============================================================
 # SERVICE
-# ============================================================
 
 resource "aws_ecs_service" "this" {
   name            = "homeease-${var.environment}-${var.name}"
@@ -196,10 +164,7 @@ resource "aws_ecs_service" "this" {
     service {
       port_name      = "http"
       discovery_name = var.name
-      # Short name on purpose: the images' nginx.conf proxies to
-      # "backend:5000" / "admin-backend:5001". Without dns_name, Service
-      # Connect only publishes "<name>.<namespace>" and those lookups
-      # fail with "host not found in upstream".
+      # Short name on purpose: nginx.conf proxies to backend:5000 / admin-backend:5001
       client_alias {
         port     = var.container_port
         dns_name = var.name
@@ -207,23 +172,17 @@ resource "aws_ecs_service" "this" {
     }
   }
 
-  # ECS's own default MinimumHealthyPercent/MaximumPercent (100/200)
-  # already gives a rolling deploy with no downtime — explicit here so
-  # it's a decision, not an unstated default, matching the PDB
-  # maxUnavailable comment's own style on the Kubernetes side.
+  # Rolling deploy with no downtime (ECS defaults, made explicit)
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
 
-  # A deploy whose tasks keep failing (bad image, bad config, failed
-  # health check) stops and rolls back to the last steady task
-  # definition instead of retrying forever.
+  # Roll back to the last steady task definition on repeated failures
   deployment_circuit_breaker {
     enable   = true
     rollback = true
   }
 
-  # Only meaningful behind an ALB: lets a task finish starting before
-  # target-group health checks can mark it unhealthy and kill it.
+  # ALB only: grace period before target-group health checks
   health_check_grace_period_seconds = var.alb_target_group_arn != null ? 60 : null
 
   tags = var.tags
@@ -233,12 +192,7 @@ resource "aws_ecs_service" "this" {
   }
 }
 
-# ============================================================
-# AUTOSCALING — target tracking on CPU, same 70% target and the same
-# min/max shape as this service's HPA in gitops_homeease
-# (charts/<service>/values.yaml's hpa: block). Not a coincidence:
-# same workload, same load characteristics, same threshold.
-# ============================================================
+# AUTOSCALING — target tracking on CPU
 
 resource "aws_appautoscaling_target" "this" {
   max_capacity       = var.max_capacity
@@ -265,11 +219,7 @@ resource "aws_appautoscaling_policy" "cpu" {
   }
 }
 
-# ============================================================
-# ALARMS — CPU and memory per service (needs no Container Insights;
-# these are the standard AWS/ECS service metrics). Notifications go to
-# alarm_topic_arn when set.
-# ============================================================
+# ALARMS — CPU and memory per service
 
 resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   alarm_name          = "homeease-${var.environment}-${var.name}-cpu-high"

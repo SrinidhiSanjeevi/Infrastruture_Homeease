@@ -17,17 +17,14 @@ terraform {
 
 data "azuread_client_config" "current" {}
 
-# ============================================================
 # APPLICATION + SERVICE PRINCIPAL
-# ============================================================
 
 resource "azuread_application" "ci" {
   display_name     = var.application_display_name
   owners           = [data.azuread_client_config.current.object_id]
   sign_in_audience = "AzureADMyOrg"
 
-  # No API permissions are requested. This identity does not read the
-  # directory; it only holds Azure RBAC role assignments on resources.
+  # No API permissions are requested.
 }
 
 resource "azuread_service_principal" "ci" {
@@ -45,8 +42,7 @@ resource "azuread_service_principal" "ci" {
 resource "azuread_application_federated_identity_credential" "azure_devops" {
   count = var.enable_azure_devops ? 1 : 0
 
-  # azuread v3: this is the application's RESOURCE ID (/applications/<uuid>),
-  # not the client ID. In v2 the argument was `application_object_id`.
+  # azuread v3: this is the application's RESOURCE ID (/applications/<uuid>), not the client ID.
   application_id = azuread_application.ci.id
 
   display_name = "ado-${var.ado_project_name}-${var.ado_service_connection_name}"
@@ -71,10 +67,7 @@ resource "azuread_application_federated_identity_credential" "github_main" {
   subject   = "repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/main"
 }
 
-# .github/workflows/terraform.yml runs each job in a GitHub Environment
-# (environment: dev|staging|prod). GitHub then issues the token with an
-# environment subject, NOT the branch subject above — without this
-# credential azure/login fails with AADSTS70021 (no matching credential).
+# Each terraform.yml job runs in a GitHub Environment (dev|staging|prod)
 resource "azuread_application_federated_identity_credential" "github_environment" {
   count = var.enable_github && var.github_environment != null ? 1 : 0
 
@@ -99,7 +92,7 @@ resource "azuread_application_federated_identity_credential" "github_pr" {
   subject   = "repo:${var.github_owner}/${var.github_repository}:pull_request"
 }
 
-# Role assignment: AcrPush only — pull is granted separately to the cluster's kubelet identity
+# Role assignment: AcrPush only
 
 resource "azurerm_role_assignment" "acr_push" {
   scope                = var.acr_id
@@ -122,8 +115,7 @@ resource "azurerm_role_assignment" "tfstate_contributor" {
 }
 
 resource "azurerm_role_assignment" "subscription_scope" {
-  # A plain bool, not "scope != null": the scope is usually a resource
-  # group created in the same apply, so its ID is unknown at plan time.
+  # A plain bool, not "scope != null"
   count = var.enable_subscription_role_assignment ? 1 : 0
 
   scope                = var.subscription_role_scope

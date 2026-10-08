@@ -39,14 +39,7 @@ variable "budget_contact_emails" {
   type = list(string)
 }
 
-# ============================================================
-# IMAGE TAGS — the "GitOps" file. app_Homeease's aws-ci.yml commits
-# updates here after a successful push+sign to ECR, one file, same
-# mechanism azure-pipelines.yml's Promote stage already uses against
-# gitops_homeease's values-azure-dev.yaml. Loaded automatically
-# (.auto.tfvars — no -var-file flag needed) from image-tags.auto.tfvars
-# in this directory.
-# ============================================================
+# IMAGE TAGS — the "GitOps" file.
 
 variable "image_tags" {
   type = object({
@@ -59,11 +52,7 @@ variable "image_tags" {
   })
 }
 
-# ============================================================
-# NON-SECRET APP CONFIG — the direct equivalent of each chart's plain
-# `env:` block in gitops_homeease (as opposed to secrets, which come
-# from Secrets Manager via environments/dev's outputs).
-# ============================================================
+# NON-SECRET APP CONFIG — the direct equivalent of each chart's plain `env:` block in gitops_homeease
 
 variable "allowed_origins" {
   description = "CORS origin(s) — set once the ALB DNS name is known from a first apply, or a real domain if one exists."
