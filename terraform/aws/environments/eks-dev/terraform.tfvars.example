@@ -1,0 +1,9 @@
+registry_state_bucket = "REPLACE-WITH-BOOTSTRAP-bucket_name-OUTPUT" # same value as environments/dev/backend.tf's bucket
+budget_contact_emails = ["you@example.com"]
+
+# Optional (defaults shown)
+# node_instance_types          = ["m7i-flex.large"]
+# node_desired_size            = 2
+# public_access_cidrs          = ["0.0.0.0/0"] # narrow to your IP
+# enable_cloudfront            = false         # true once the two ingress NLBs exist
+# create_fargate_teardown_role = false

@@ -12,7 +12,7 @@
 #
 # Needs the OPT-IN role from environments/eks-dev (create_fargate_teardown_role = true) as the repository
 # variable AWS_FARGATE_TEARDOWN_ROLE_ARN. If you prefer not to create that broad role, run the same steps
-# locally with your own credentials (README, "Decommission ECS").
+# locally with your own credentials (terraform/aws/environments/eks-dev/README.md, "Decommission ECS").
 name: aws-fargate-destroy
 
 on:

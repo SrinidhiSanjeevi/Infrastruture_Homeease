@@ -3,6 +3,7 @@
 - **Date:** 2026-10-07
 - **Scope:** `app_Homeease`, `Infrastructure_Homeease`, `gitops_homeease`
 - **Platforms:** Azure (AKS + Argo CD), AWS (ECS Fargate), MongoDB Atlas
+- **Note:** written before the move to EKS ([ADR-0002](adr/0002-eks-with-gitops-on-aws.md)); the AWS findings describe the Fargate stack, which is now legacy
 - **Reviewer:** engineering review against a Google-SRE-style PRR checklist
 
 A Production Readiness Review asks one question per dimension: *what happens

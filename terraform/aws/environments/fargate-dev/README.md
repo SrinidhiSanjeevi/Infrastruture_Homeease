@@ -1,22 +1,12 @@
-# fargate-dev
+# fargate-dev (legacy)
 
-The live AWS compute path — 5 HomeEase services on ECS Fargate, behind
-one ALB, sharing `environments/dev`'s VPC/ECR/Secrets Manager. Written,
-**not applied** — no AWS credentials or account exist in the environment
-this was built in to run `terraform apply` against. See the root
-README's "Should `terraform apply` be automated?" section for the CI
-wiring this environment is designed to slot into once someone does
-apply it.
-
-## Why Fargate, not the EKS path in `_reference-eks/`
-
-EKS's own header comment (now in `_reference-eks/environments/dev/
-main.tf.orig`) already priced it: ~$135/month baseline (EKS control
-plane + NAT Gateway + one node) before any autoscaling. Fargate has no
-per-cluster control plane fee — see the cost estimate in
-`main.tf`'s header comment (~$40-60/month all-in at default sizing, on
-top of `environments/dev`'s ~$32/month VPC/NAT, which is paid either
-way).
+The first AWS compute path: the six HomeEase services on ECS Fargate,
+behind one ALB, sharing `environments/dev`'s VPC/ECR/Secrets Manager.
+It was applied and still serves the older CloudFront URLs, but the AWS
+target is now `eks-dev` ([ADR-0002](../../../../docs/adr/0002-eks-with-gitops-on-aws.md)
+supersedes [ADR-0001](../../../../docs/adr/0001-ecs-fargate-over-eks.md)).
+The code stays so the stack can be re-applied for comparison;
+`.github/workflows/aws-fargate-destroy.yml` tears it down.
 
 ## What's here vs. what it builds on
 
@@ -49,19 +39,16 @@ mechanism instead:
 
 1. `app_Homeease`'s `aws-ci.yml` builds, scans, SBOMs, signs, and pushes
    a service's image to ECR (already true today).
-2. A new step clones this repo and rewrites `image_tags.<service>` in
-   `image-tags.auto.tfvars`, commits, and pushes to `main` — the exact
-   mechanism `azure-pipelines.yml`'s Promote stage already uses against
-   `gitops_homeease`.
-3. A new GitHub Actions workflow in **this** repo, triggered on a push
-   to `main` that touches this file, runs `terraform plan` then
-   `terraform apply` for `fargate-dev` — gated behind a GitHub
-   Environment (`aws-fargate-dev`) the same way `prod`'s Terraform plan
-   already requires reviewer approval.
+2. When the app repo variable `AWS_DEPLOY_TARGET` is `fargate` or
+   `both`, a CI step clones this repo, rewrites `image_tags.<service>` in
+   `image-tags.auto.tfvars`, commits, and pushes to `main`.
+3. A human runs `terraform apply` for `fargate-dev`, which registers new
+   task definitions and rolls the services. Apply is not automated for
+   this stack.
 
 `.tfvars` committed to git IS the GitOps state for this stack, the same
 way `values-azure-dev.yaml` is for the Helm/Argo CD path — just without
-a cluster-side controller pulling it, since apply already runs from CI.
+a controller pulling it.
 
 ## First apply (by a human, once)
 
