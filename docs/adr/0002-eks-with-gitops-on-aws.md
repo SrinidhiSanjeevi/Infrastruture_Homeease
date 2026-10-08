@@ -1,6 +1,6 @@
 # ADR-0002: EKS with Argo CD for AWS compute (supersedes ADR-0001)
 
-- **Status:** Accepted - **not yet applied**
+- **Status:** Accepted - applied 2026-10-08. EKS (`homeease-eks-dev`) is managed by the Argo CD on AKS as cluster `eks-dev` (one Argo CD for both clouds)
 - **Date:** 2026-10-07
 - **Decision owner:** Srinidhi Sanjeevi
 - **Supersedes:** ADR-0001 (ECS Fargate over EKS)

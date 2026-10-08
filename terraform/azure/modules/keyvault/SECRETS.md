@@ -3,8 +3,7 @@
 Terraform manages the Key Vault **container** (`main.tf` in this
 module) and **who can read it** (RBAC role assignments in
 `modules/workload-identity`). Terraform does not manage, and must
-never manage, the secret **values** inside it. See the deleted
-`modules/secrets` module for why: any Terraform `resource` or `data`
+never manage, the secret **values** inside it, because any Terraform `resource` or `data`
 block that touches a real secret value writes that value into the
 Terraform state file in plaintext — `sensitive = true` only hides it
 from console output, not from state.
@@ -14,7 +13,7 @@ from console output, not from state.
 ```bash
 az keyvault secret set \
   --vault-name kv-homeease-dev-hs02 \
-  --name mongo-uri \
+  --name booking-mongo-uri \
   --value "<the real connection string>"
 ```
 
@@ -48,8 +47,7 @@ above for why nothing should).
 
 `mongo-uri` (singular, no service prefix) is a **stale pre-split name still
 present in the vault** — created before backend/admin-backend/payment-service/
-notification-service each got their own database (see
-`app_Homeease/scripts/local-db-split/README.md`). Its current value points at
+notification-service each got their own database. Its current value points at
 `docauth.ede9v4k.mongodb.net/dockerAuthDB`, which is not a HomeEase database
 at all. Don't reuse it for any of the four names above — it needs replacing
 with the four real per-service connection strings by hand (see below), and

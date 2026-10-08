@@ -24,8 +24,8 @@ crash.*.log
 
 # Allow the fargate-dev image-tag file: not a secret, just a map of
 # service -> ECR tag, and it MUST be tracked — it's the file
-# app_Homeease's aws-ci.yml commits to, and the file
-# terraform-aws-fargate-apply.yml applies. Without this exception the
+# app_Homeease's aws-ci.yml commits to (legacy ECS path) and that
+# `terraform apply` in fargate-dev reads. Without this exception the
 # blanket *.tfvars rule above silently swallows it and the whole
 # promotion mechanism has nothing to commit to.
 !terraform/aws/environments/fargate-dev/image-tags.auto.tfvars

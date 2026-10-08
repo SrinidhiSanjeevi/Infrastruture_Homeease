@@ -1,6 +1,6 @@
 # ADR-0001: ECS Fargate for AWS compute, not EKS
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0002](0002-eks-with-gitops-on-aws.md) (2026-10-08)
 - **Date:** 2026-10-07
 - **Decision owner:** Srinidhi Sanjeevi
 - **Applies to:** `terraform/aws/environments/fargate-dev`

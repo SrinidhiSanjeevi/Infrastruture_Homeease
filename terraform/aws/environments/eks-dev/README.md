@@ -1,14 +1,15 @@
-# eks-dev - EKS + Argo CD on AWS
+# eks-dev - EKS on AWS, managed by the Argo CD on AKS
 
 Kubernetes path for AWS. Same operating model as Azure: managed control plane, Helm charts from
 `gitops_homeease`, Argo CD reconciling Git into the cluster, workload identity (IRSA) for secrets.
+There is one Argo CD for both clouds: it runs on AKS and manages this cluster as `eks-dev`.
 The ECS Fargate path (`../fargate-dev`) is untouched and can be re-applied from the same code.
 Decision and cost reasoning: `docs/adr/0002-eks-with-gitops-on-aws.md`.
 
 ```
 git push (app repo) -> aws-ci.yml: gates, build, sign, push to ECR
                     -> commits image.tag into gitops_homeease charts/<svc>/values-aws-dev.yaml
-                    -> Argo CD (in this cluster) syncs it           <- a deployment is a commit
+                    -> Argo CD (hub on AKS) syncs it to eks-dev     <- a deployment is a commit
 browser -> CloudFront (HTTPS) -> NLB -> ingress-nginx -> frontend pods -> backend pods -> Atlas (via the NAT's fixed IP)
 ```
 
@@ -16,7 +17,7 @@ browser -> CloudFront (HTTPS) -> NLB -> ingress-nginx -> frontend pods -> backen
 
 | Builds | Does not build (Argo CD / bootstrap owns it) |
 |---|---|
-| EKS cluster, managed node group, add-ons (vpc-cni with NetworkPolicy, coredns, kube-proxy, EBS CSI, metrics-server) | Argo CD, ingress-nginx, Secrets Store CSI driver - `gitops_homeease/scripts/bootstrap-eks.sh` |
+| EKS cluster, managed node group, add-ons (vpc-cni with NetworkPolicy, coredns, kube-proxy, EBS CSI, metrics-server) | gp3 default StorageClass, ingress-nginx, Secrets Store CSI driver - `gitops_homeease/scripts/bootstrap-eks.sh`; registration in the AKS Argo CD |
 | 3 IRSA roles (app, payment, notification) | The six services, monitoring stack - Argo CD, from Git |
 | EKS access entries (who may use kubectl) | Secret **values** - set by hand in Secrets Manager, as today |
 | CloudFront x2 (phase 2), apply role, budget | VPC, NAT, ECR, secrets containers - the `dev` stack, reused |
@@ -36,7 +37,10 @@ browser -> CloudFront (HTTPS) -> NLB -> ingress-nginx -> frontend pods -> backen
 4. **GitHub settings.**
    - Infra repo, variable `AWS_TF_APPLY_ROLE_ARN` = the output above. Secrets: `GITOPS_REPO_PAT` (read), `GRAFANA_ADMIN_PASSWORD`, `ALERTMANAGER_SMTP_PASSWORD`.
    - App repo, secret `GITOPS_REPO_PAT` (contents: write on the GitOps repo). Variable `AWS_DEPLOY_TARGET` = `eks` (or `both` while ECS still runs; `fargate` restores the old behaviour).
-5. **Actions -> `aws-eks-apply` -> action = apply.** Infra (no-op after step 3), then bootstrap (Argo CD + add-ons), then CloudFront. The run summary prints both URLs.
+5. **Actions -> `aws-eks-apply` -> action = apply.** Infra (no-op after step 3), then bootstrap (cluster add-ons), then CloudFront. The run summary prints both URLs.
+   Then, once, from a machine logged in to the AKS Argo CD: `REGISTER_WITH_HUB=1 scripts/bootstrap-eks.sh`
+   in `gitops_homeease` (or `argocd cluster add <eks-context> --name eks-dev` and
+   `kubectl apply -f argocd/aws/bootstrap/root-app.yaml` against AKS).
 6. **Verify** (checklist below). Only then decommission ECS.
 7. **Decommission ECS** - see below.
 
@@ -45,7 +49,7 @@ browser -> CloudFront (HTTPS) -> NLB -> ingress-nginx -> frontend pods -> backen
 ```bash
 aws eks update-kubeconfig --name homeease-eks-dev --region ap-south-1
 kubectl get nodes                                  # 2 Ready
-kubectl get applications -n argocd                 # all Synced / Healthy
+argocd app list | grep aws                         # on the AKS hub: all Synced / Healthy
 kubectl get pods -n homeease-dev                   # 6 services Running
 kubectl get secret backend-secrets -n homeease-dev # exists => IRSA + Secrets Manager + CSI sync work
 kubectl get svc -n ingress-nginx                   # two NLB hostnames
@@ -80,7 +84,6 @@ The audit baseline is then running but unmanaged; importing it into this stack i
 
 ## Known limits
 
-- **Not yet applied.** Everything here passed `terraform validate`/`helm template`, but has not run against the live account. Expect to iterate on the first apply (IAM permissions most likely).
 - Public Kubernetes API endpoint (`0.0.0.0/0`, authentication required). Narrow `public_access_cidrs`.
 - One NAT gateway (shared dev stack), single region. Nodes egress through it, so the Atlas allowlist works unchanged.
 - No CloudWatch dashboards/alarms on this path: Prometheus + Alertmanager (same as Azure) replace them. The Azure DORA exporter is not deployed.

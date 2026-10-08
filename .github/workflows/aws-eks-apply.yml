@@ -1,4 +1,6 @@
-# AWS EKS - plan / apply, then bootstrap Argo CD, then put CloudFront in front.
+# AWS EKS - plan / apply, then bootstrap the cluster add-ons, then put CloudFront in front.
+# Argo CD is not installed here: the Argo CD on AKS manages this cluster as `eks-dev` (one-time registration,
+# see terraform/aws/environments/eks-dev/README.md).
 #
 # Manual by design (workflow_dispatch): choosing action=apply IS the approval. The job cannot use a GitHub
 # "environment:" gate because the AWS role trusts the branch-form OIDC subject (repo:...:ref:refs/heads/main);
@@ -8,7 +10,7 @@
 # plus bootstrap plus CloudFront can exceed that in one job.
 #
 #   infra      terraform plan (and apply)  environments/eks-dev, enable_cloudfront=false
-#   bootstrap  helm: CSI driver, ingress-nginx x2, Argo CD -> root Application (GitOps takes over here)
+#   bootstrap  gp3 StorageClass, CSI driver, ingress-nginx x2, monitoring secrets (gitops scripts/bootstrap-eks.sh)
 #   edge       terraform apply with enable_cloudfront=true once the NLBs exist
 #
 # Needed in this repository (Settings > Secrets and variables > Actions):
@@ -26,7 +28,7 @@ on:
         options: [plan, apply]
         default: plan
       bootstrap:
-        description: "After apply: install Argo CD and the cluster add-ons (needed on a fresh cluster)"
+        description: "After apply: install the cluster add-ons (needed on a fresh cluster)"
         type: boolean
         default: true
       cloudfront:
@@ -110,7 +112,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   bootstrap:
-    name: Bootstrap Argo CD and add-ons
+    name: Bootstrap cluster add-ons
     needs: infra
     if: inputs.action == 'apply' && inputs.bootstrap
     runs-on: ubuntu-24.04
@@ -148,8 +150,13 @@ jobs:
             done
           done
 
-      - name: Argo CD application status
-        run: kubectl get applications -n argocd
+      - name: Next step (Argo CD hub)
+        run: |
+          {
+            echo '### Register with the Argo CD hub (once per new cluster)'
+            echo 'From a machine logged in to the AKS Argo CD, in gitops_homeease:'
+            echo '`REGISTER_WITH_HUB=1 scripts/bootstrap-eks.sh`'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   edge:
     name: CloudFront (HTTPS)

@@ -26,17 +26,20 @@ workload's own IRSA role never get write access.
 
 ## Naming convention
 
-Names here are what `gitops_homeease`'s AWS `SecretProviderClass`
-resources reference by `objectName` (see
-`apps/payment-service/overlays/aws/dev/secretproviderclass.yaml`) — keep
-both sides in sync by hand, since nothing enforces this automatically
+Names here are what the `secretProviderClass.objects[].awsSecret` entries
+in `gitops_homeease`'s `charts/<service>/values-aws-dev.yaml` reference.
+The containers are created in `environments/dev/main.tf`. Keep both sides
+in sync by hand, since nothing enforces this automatically
 (deliberately: see above for why nothing should).
 
-| Secrets Manager secret name                              | Consumed by     | Env var it becomes        |
-| ---------------------------------------------------------| ---------------- | -------------------------- |
-| `homeease/dev/payment-service/razorpay-key-id`            | payment-service | `RAZORPAY_KEY_ID`          |
-| `homeease/dev/payment-service/razorpay-key-secret`        | payment-service | `RAZORPAY_KEY_SECRET`      |
-| `homeease/dev/payment-service/razorpay-webhook-secret`    | payment-service | `RAZORPAY_WEBHOOK_SECRET`  |
+All names are `homeease/dev/<service>/<suffix>`:
+
+| Service | Secret suffixes |
+|---|---|
+| backend | `mongo-uri`, `jwt-secret`, `email-user`, `email-pass`, `azure-storage-account-key` |
+| admin-backend | `mongo-uri`, `jwt-secret`, `azure-storage-account-key` |
+| payment-service | `mongo-uri`, `razorpay-key-id`, `razorpay-key-secret`, `razorpay-webhook-secret` |
+| notification-service | `mongo-uri`, `email-user`, `email-pass` |
 
 ## Rotation
 
