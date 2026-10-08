@@ -1,8 +1,4 @@
-# ============================================================
-# Apply terraform/aws/bootstrap FIRST, then paste its bucket_name
-# output below. Do not run this environment against local state —
-# see the bootstrap stack's header comment for why.
-# ============================================================
+# Apply terraform/aws/bootstrap FIRST, then paste its bucket_name output below.
 
 terraform {
   backend "s3" {

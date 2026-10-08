@@ -1,13 +1,4 @@
-# ============================================================
-# These become GitHub repository VARIABLES on the APP repo
-# (app_Homeease), consumed by .github/workflows/aws-ci.yml:
-#
-#   gh variable set AWS_ACCOUNT_ID  --repo <owner>/app_Homeease --body "$(terraform output -raw account_id)"
-#   gh variable set AWS_REGION      --repo <owner>/app_Homeease --body "ap-south-1"
-#   gh variable set AWS_CI_ROLE_ARN --repo <owner>/app_Homeease --body "$(terraform output -raw ci_role_arn)"
-#
-# Variables, not secrets. None of these are credentials.
-# ============================================================
+# These become GitHub repository VARIABLES on the APP repo (app_Homeease)
 
 output "account_id" {
   value = module.ci_oidc.account_id
@@ -43,12 +34,7 @@ output "repository_arns" {
   value = module.ecr.repository_arns
 }
 
-# ============================================================
-# Consumed by fargate-dev via `terraform_remote_state` (same state
-# backend, key "aws/dev.terraform.tfstate" — see fargate-dev/main.tf).
-# Not GitHub repository variables like the block above; these stay
-# inside Terraform, read stack-to-stack.
-# ============================================================
+# Consumed by fargate-dev via `terraform_remote_state`
 
 output "vpc_id" {
   value = module.networking.vpc_id

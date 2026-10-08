@@ -1,6 +1,4 @@
-# ============================================================
 # RESOURCE GROUP
-# ============================================================
 
 module "resource_group" {
   source = "../../modules/resource-group"
@@ -11,9 +9,7 @@ module "resource_group" {
   tags = local.common_tags
 }
 
-# ============================================================
 # MONITORING (audit logs for ACR / Key Vault / AKS)
-# ============================================================
 
 module "monitoring" {
   source = "../../modules/monitoring"
@@ -25,9 +21,7 @@ module "monitoring" {
   tags = local.common_tags
 }
 
-# ============================================================
 # NETWORKING
-# ============================================================
 
 module "networking" {
   source = "../../modules/networking"
@@ -43,9 +37,7 @@ module "networking" {
   tags = local.common_tags
 }
 
-# ============================================================
 # AZURE CONTAINER REGISTRY
-# ============================================================
 
 module "acr" {
   source = "../../modules/acr"
@@ -65,9 +57,7 @@ module "acr" {
   tags = local.common_tags
 }
 
-# ============================================================
 # AKS
-# ============================================================
 
 module "aks" {
   source = "../../modules/aks"
@@ -99,9 +89,7 @@ module "aks" {
   tags = local.common_tags
 }
 
-# ============================================================
 # KEY VAULT
-# ============================================================
 
 module "keyvault" {
   source = "../../modules/keyvault"
@@ -170,18 +158,13 @@ module "workload_identity_payment" {
   namespace            = var.kubernetes_namespace
   service_account_name = "payment-service"
 
-  # TODO (future hardening, not done here): a SEPARATE Key Vault
-  # scoped to only payment-service's secrets is what actually
-  # achieves isolation, since RBAC is vault-wide. Sharing the vault
-  # for now is a documented, deliberate trade-off — not an oversight.
+  # TODO: separate Key Vault for payment-service secrets (RBAC is vault-wide)
   key_vault_id = module.keyvault.id
 
   tags = local.common_tags
 }
 
-# ============================================================
 # COMMON TAGS
-# ============================================================
 
 locals {
   common_tags = {

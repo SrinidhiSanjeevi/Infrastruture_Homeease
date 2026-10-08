@@ -1,6 +1,4 @@
-# Azure Policy: every taggable resource in the environment's resource group
-# must carry the standard tags (cost reporting, ownership, audit).
-# Built-in definition "Require a tag on resources".
+# Azure Policy: require the standard tags in the environment's resource group
 
 locals {
   required_tags = ["project", "environment", "owner"]

@@ -1,6 +1,4 @@
-# ============================================================
 # HomeEase Virtual Network
-# ============================================================
 
 resource "azurerm_virtual_network" "this" {
   name                = "vnet-homeease-${var.environment}"
@@ -11,9 +9,7 @@ resource "azurerm_virtual_network" "this" {
   tags = var.tags
 }
 
-# ============================================================
 # AKS Subnet
-# ============================================================
 
 resource "azurerm_subnet" "aks" {
   name                 = "snet-aks-${var.environment}"
@@ -25,9 +21,7 @@ resource "azurerm_subnet" "aks" {
   service_endpoints = ["Microsoft.KeyVault"]
 }
 
-# ============================================================
 # Private Endpoint Subnet
-# ============================================================
 
 resource "azurerm_subnet" "private_endpoints" {
   name                 = "snet-private-endpoints-${var.environment}"
@@ -36,18 +30,14 @@ resource "azurerm_subnet" "private_endpoints" {
   address_prefixes     = var.private_endpoint_subnet_prefix
 }
 
-# ============================================================
 # AKS Node Subnet NSG
-# ============================================================
 
 resource "azurerm_network_security_group" "aks" {
   name                = "nsg-aks-${var.environment}"
   location            = var.location
   resource_group_name = var.resource_group_name
 
-  # ----------------------------------------------------------
   # Allow Azure Load Balancer health probes
-  # ----------------------------------------------------------
   security_rule {
     name                       = "AllowAzureLoadBalancer"
     priority                   = 100
@@ -60,10 +50,7 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "*"
   }
 
-  # ----------------------------------------------------------
   # Allow HTTP traffic to NodePorts
-  # Azure Load Balancer forwards public :80 to ingress NodePort
-  # ----------------------------------------------------------
   security_rule {
     name                       = "AllowHTTPNodePort"
     priority                   = 110
@@ -76,9 +63,7 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "*"
   }
 
-  # ----------------------------------------------------------
   # Allow HTTPS traffic to NodePorts
-  # ----------------------------------------------------------
   security_rule {
     name                       = "AllowHTTPSNodePort"
     priority                   = 120
@@ -91,9 +76,7 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "*"
   }
 
-  # ----------------------------------------------------------
   # Optional direct HTTP access
-  # ----------------------------------------------------------
   security_rule {
     name                       = "AllowHTTPInbound"
     priority                   = 130
@@ -106,9 +89,7 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "*"
   }
 
-  # ----------------------------------------------------------
   # Optional direct HTTPS access
-  # ----------------------------------------------------------
   security_rule {
     name                       = "AllowHTTPSInbound"
     priority                   = 140
@@ -124,18 +105,14 @@ resource "azurerm_network_security_group" "aks" {
   tags = var.tags
 }
 
-# ============================================================
 # Attach NSG to AKS subnet
-# ============================================================
 
 resource "azurerm_subnet_network_security_group_association" "aks" {
   subnet_id                 = azurerm_subnet.aks.id
   network_security_group_id = azurerm_network_security_group.aks.id
 }
 
-# ============================================================
 # Private Endpoint NSG
-# ============================================================
 
 resource "azurerm_network_security_group" "private_endpoints" {
   name                = "nsg-pe-${var.environment}"
@@ -145,9 +122,7 @@ resource "azurerm_network_security_group" "private_endpoints" {
   tags = var.tags
 }
 
-# ============================================================
 # Attach Private Endpoint NSG
-# ============================================================
 
 resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
   subnet_id                 = azurerm_subnet.private_endpoints.id

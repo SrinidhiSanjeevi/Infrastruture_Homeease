@@ -1,8 +1,4 @@
-# ============================================================
-# Same bucket as every other AWS environment (see
-# environments/dev/backend.tf) — own state KEY so this stack's state
-# never collides with dev's or _reference-eks's.
-# ============================================================
+# Same bucket as every other AWS environment (see environments/dev/backend.tf)
 
 terraform {
   backend "s3" {

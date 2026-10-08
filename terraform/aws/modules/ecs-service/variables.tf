@@ -114,10 +114,7 @@ variable "on_demand_base" {
   default = 0
 }
 
-# ============================================================
-# INGRESS — exactly one of these describes how this service is
-# reachable, matching its NetworkPolicy on the Kubernetes side.
-# ============================================================
+# INGRESS — exactly one of these describes how this service is reachable
 
 variable "attach_alb" {
   description = "True for frontend/admin-frontend only — the two services with a public Ingress in gitops_homeease. A literal bool, not derived from alb_security_group_id itself, because that value is unknown at plan time (the ALB is created in the same apply) and for_each/count can't branch on an unknown value."

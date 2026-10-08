@@ -1,16 +1,4 @@
-# ============================================================
 # AWS — staging, CI/registry scope only
-#
-# Does NOT re-declare module.ecr or create a second GitHub OIDC
-# provider — both are account-wide singletons already created by
-# dev/main.tf. See that file's header comment.
-#
-# What staging DOES need: its own Terraform state key, its own
-# least-privilege identity for the infra repo's GitHub Actions
-# workflow to plan/apply THIS environment, and its own budget so
-# cost is tracked per environment even before any compute exists
-# here.
-# ============================================================
 
 locals {
   common_tags = {

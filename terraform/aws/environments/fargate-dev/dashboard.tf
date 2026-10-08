@@ -1,23 +1,4 @@
-# ============================================================
-# CloudWatch dashboards — the AWS counterpart of the four Grafana
-# dashboards on AKS (gitops_homeease/platform/kube-prometheus-stack/
-# dashboards): Business Overview, Payment Service, RED & infrastructure,
-# Logs.
-#
-# Where each number comes from:
-#
-#  * Business and payment numbers: MongoDB is the source of truth. The
-#    backend and payment-service read the counts from the database every
-#    30 s and publish them (namespace "HomeEase"). Every pod publishes the
-#    same value, so widgets use Maximum (never Sum) and a restart loses
-#    nothing — the same "max()" rule the Grafana panels use.
-#  * Traffic, latency, errors, CPU, memory, task counts: the ALB, ECS and
-#    Container Insights publish these natively.
-#  * Logs: CloudWatch Logs Insights queries over the six service log groups.
-#
-# Not carried over (nothing on AWS produces the data): DORA (comes from the
-# Azure pipeline) and Prometheus request-latency histograms.
-# ============================================================
+# CloudWatch dashboards — the AWS counterpart of the four Grafana dashboards on AKS
 
 locals {
   cw_region = var.region
@@ -49,11 +30,7 @@ locals {
 }
 
 
-# ------------------------------------------------------------------
 # Traffic / latency panels (the Prometheus http_* panels in Grafana).
-# Computed from the one-line-per-request logs the services write, so no
-# extra agent or cost: request rate, 4xx/5xx, p50/p95/p99 latency.
-# ------------------------------------------------------------------
 locals {
   api_services = ["backend", "admin-backend", "payment-service", "notification-service"]
   api_source   = join(" | ", [for k in local.api_services : "SOURCE '/ecs/${local.cluster}/${k}'"])
@@ -171,9 +148,7 @@ locals {
   ]
 }
 
-# ============================================================
-# 1. BUSINESS OVERVIEW  (Grafana: "HomeEase Business Overview")
-# ============================================================
+# 1. BUSINESS OVERVIEW (Grafana: "HomeEase Business Overview")
 resource "aws_cloudwatch_dashboard" "business" {
   dashboard_name = "${local.cluster}-business-overview"
 
@@ -295,9 +270,7 @@ resource "aws_cloudwatch_dashboard" "business" {
   })
 }
 
-# ============================================================
-# 2. PAYMENT SERVICE  (Grafana: "HomeEase - Payment Service")
-# ============================================================
+# 2. PAYMENT SERVICE (Grafana: "HomeEase - Payment Service")
 resource "aws_cloudwatch_dashboard" "payments" {
   dashboard_name = "${local.cluster}-payment-service"
 
@@ -387,10 +360,7 @@ resource "aws_cloudwatch_dashboard" "payments" {
   })
 }
 
-# ============================================================
-# 3. RED & INFRASTRUCTURE  (Grafana: "HomeEase RED & Kubernetes")
-#    Rate (requests), Errors (5xx), Duration (latency) + tasks/CPU/memory
-# ============================================================
+# 3. RED & INFRASTRUCTURE (Grafana: "HomeEase RED & Kubernetes")
 resource "aws_cloudwatch_dashboard" "ecs" {
   dashboard_name = "${local.cluster}-red-ecs"
 
@@ -488,10 +458,7 @@ resource "aws_cloudwatch_dashboard" "ecs" {
   })
 }
 
-# ============================================================
-# 4. LOGS  (Grafana: "HomeEase - Logs (Alloy → Loki)")
-#    CloudWatch Logs Insights over the six service log groups.
-# ============================================================
+# 4. LOGS (Grafana: "HomeEase - Logs (Alloy → Loki)")
 resource "aws_cloudwatch_dashboard" "logs" {
   dashboard_name = "${local.cluster}-logs"
 

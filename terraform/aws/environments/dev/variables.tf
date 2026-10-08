@@ -50,9 +50,7 @@ variable "budget_contact_emails" {
   type        = list(string)
 }
 
-# ============================================================
 # NETWORKING
-# ============================================================
 
 variable "vpc_cidr" {
   type    = string

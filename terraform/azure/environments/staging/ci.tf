@@ -21,7 +21,7 @@ module "ci_identity" {
   # Matches `environment: ${{ matrix.env }}` in .github/workflows/terraform.yml.
   github_environment = var.environment
 
-  # Same trade-off as dev: one identity trusted for both apply and plan
+  # Same trade-off as dev
   enable_github_pull_request = false
 
   tfstate_storage_account_id = var.tfstate_storage_account_id
@@ -41,9 +41,7 @@ output "ci_tenant_id" {
   value = module.ci_identity.tenant_id
 }
 
-# ============================================================
 # COST GUARDRAIL
-# ============================================================
 
 resource "azurerm_consumption_budget_resource_group" "homeease" {
   name              = "budget-homeease-${var.environment}"

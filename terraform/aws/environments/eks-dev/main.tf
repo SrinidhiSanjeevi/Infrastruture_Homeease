@@ -1,22 +1,4 @@
-# ============================================================
 # AWS - EKS + Argo CD (GitOps), the Kubernetes path for this cloud.
-#
-# Same operating model as the Azure side: managed control plane, Helm charts from
-# gitops_homeease, Argo CD reconciling Git into the cluster, workload identity for secrets.
-# The Fargate path (environments/fargate-dev) is kept in the repository untouched.
-#
-# Builds on environments/dev's outputs (VPC, ECR, Secrets Manager containers, GitHub OIDC
-# provider) via terraform_remote_state - this stack creates NO network, NO ECR repositories and
-# NO secrets of its own. That is what lets it be applied and destroyed without touching them.
-#
-# What lands here:       cluster, node group, add-ons, IRSA roles, apply role, budget, CloudFront.
-# What does NOT land:    Argo CD, ingress-nginx, the Secrets Store CSI driver, monitoring.
-#                        Those are installed by gitops_homeease/scripts/bootstrap-eks.sh (once) and
-#                        then managed by Argo CD - Terraform stops at the cluster boundary.
-#
-# Cost (ap-south-1, on-demand, approx): control plane $73 + 2 x m7i-flex.large ~$140 + 2 NLB ~$33
-#   + EBS ~$5 = ~$250/month on top of dev's NAT (~$32). See docs/adr/0002 before applying.
-# ============================================================
 
 locals {
   common_tags = {
@@ -27,8 +9,7 @@ locals {
     owner       = "homeease"
   }
 
-  # IRSA role names derive from this: homeease-eks-dev-app / -payment / -notification. The same ARNs are
-  # written into gitops_homeease/charts/*/values-aws-dev.yaml - change one, change the other.
+  # IRSA role names derive from this
   cluster_name = "homeease-eks-${var.environment}"
 
   registry = data.terraform_remote_state.registry.outputs
@@ -44,12 +25,7 @@ data "terraform_remote_state" "registry" {
   }
 }
 
-# ============================================================
 # SUBNET DISCOVERY TAGS
-# The VPC belongs to the dev stack, so tags are added with aws_ec2_tag (additive, per tag) rather than
-# by editing the subnets. Kubernetes uses them to place the internet-facing NLBs in public subnets and
-# any internal load balancer in private ones.
-# ============================================================
 
 locals {
   subnet_tags = merge(
@@ -68,9 +44,7 @@ resource "aws_ec2_tag" "subnet" {
   value       = each.value.value
 }
 
-# ============================================================
 # CLUSTER
-# ============================================================
 
 module "eks" {
   source = "../../modules/eks"
@@ -98,14 +72,10 @@ module "eks" {
   depends_on = [aws_ec2_tag.subnet]
 }
 
-# ============================================================
 # CLUSTER ACCESS - who can run kubectl / helm against the cluster.
-# The CI apply role needs it so the workflow can bootstrap Argo CD; the listed users so a person can
-# debug. All get cluster-admin. Narrow to a namespace-scoped policy for anyone who does not need it.
-# ============================================================
 
 locals {
-  # A map with STATIC keys: the CI role ARN is only known after apply, and for_each keys must be known at plan.
+  # STATIC keys: for_each keys must be known at plan, the CI role ARN is not
   cluster_admins = merge(
     { for arn in var.cluster_admin_principal_arns : arn => arn },
     { "ci-apply-role" = module.tf_apply_role.role_arn },
@@ -136,14 +106,7 @@ resource "aws_eks_access_policy_association" "admin" {
   depends_on = [aws_eks_access_entry.admin]
 }
 
-# ============================================================
-# IRSA - one role per blast radius, mirroring the three Azure workload identities:
-#   app          backend + admin-backend (booking data, JWT, mail, blob key)
-#   payment      payment-service only    (Razorpay keys - the one place a mistake costs money)
-#   notification notification-service    (mail credentials)
-# The frontends read no secrets and get no role. Each role may read ONLY its own Secrets Manager
-# ARNs; none can write a value (values are set by hand - see modules/secrets/SECRETS.md).
-# ============================================================
+# IRSA - one role per blast radius, mirroring the three Azure workload identities
 
 module "irsa_app" {
   source = "../../modules/irsa"
@@ -193,16 +156,7 @@ module "irsa_notification" {
   tags = local.common_tags
 }
 
-# ============================================================
 # HTTPS - CloudFront in front of the two ingress NLBs (same idea as fargate-dev, different origin).
-#
-#   browser --HTTPS--> CloudFront --HTTP--> NLB --> ingress-nginx --> frontend pods
-#
-# Two-phase because the NLBs are created by Kubernetes (the ingress-nginx Service), not by Terraform:
-#   phase 1  apply with enable_cloudfront = false  -> cluster, roles
-#            scripts/bootstrap-eks.sh              -> ingress-nginx x2 creates the NLBs
-#   phase 2  apply with enable_cloudfront = true   -> finds each NLB by its homeease-ingress tag
-# ============================================================
 
 data "aws_lb" "ingress_customer" {
   count = var.enable_cloudfront ? 1 : 0
@@ -230,10 +184,7 @@ module "cloudfront" {
   tags = local.common_tags
 }
 
-# ============================================================
-# APPLY ROLE - lets the infra repo's GitHub Actions workflow (aws-eks-apply.yml) plan/apply this
-# stack through OIDC, with no stored AWS keys. Scoped to what this stack manages, never "*" for IAM.
-# ============================================================
+# APPLY ROLE - lets the infra repo's GitHub Actions workflow
 
 data "aws_iam_policy_document" "tf_apply_extra" {
   statement {
@@ -313,8 +264,7 @@ data "aws_iam_policy_document" "tf_apply_extra" {
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/oidc.eks.${var.region}.amazonaws.com/id/*"]
   }
 
-  # EKS validates that its service-linked roles exist using the CALLER's credentials, so the caller needs
-  # GetRole on them (without it CreateNodegroup fails with "missing permissions for iam:GetRole").
+  # EKS validates that its service-linked roles exist using the CALLER's credentials
   statement {
     sid       = "ServiceLinkedRoleLookup"
     effect    = "Allow"
@@ -364,9 +314,7 @@ module "tf_apply_role" {
   tags = local.common_tags
 }
 
-# ============================================================
 # COST GUARDRAIL
-# ============================================================
 
 resource "aws_budgets_budget" "monthly" {
   name         = "${local.cluster_name}-monthly"
